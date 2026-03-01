@@ -73,24 +73,43 @@ function isRainWeather(weatherId) {
 }
 
 /**
- * Draw battlefield background: sky above (full width), ground by weather (snow layer / wet + puddles / normal).
+ * 宽屏下左右侧草地宽度：用比例与最大像素限制，避免过宽显得奇怪。
+ */
+function getSidePanelWidth(width) {
+  const ratio = 0.12 + 80 / width;
+  return Math.min(width * Math.min(ratio, 0.22), 280);
+}
+
+/**
+ * Draw battlefield background: sky (with depth), ground by weather.
+ * 宽屏友好：左右侧草地用渐变与固定感比例；整体增加立体感。
  */
 export function drawBackground(ctx, width, height, state) {
-  const farY = height * 0.5;
+  const farY = height * 0.48;
   const weatherId = state?.weather?.current;
   const sky = getSkyColors(weatherId);
 
-  const skyGradient = ctx.createLinearGradient(0, 0, 0, farY);
-  skyGradient.addColorStop(0, sky.top);
-  skyGradient.addColorStop(0.5, sky.mid);
-  skyGradient.addColorStop(1, sky.bottom);
-  ctx.fillStyle = skyGradient;
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, farY);
+  skyGrad.addColorStop(0, sky.top);
+  skyGrad.addColorStop(0.45, sky.mid);
+  skyGrad.addColorStop(1, sky.bottom);
+  ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, width, farY);
+  const skyDepth = ctx.createLinearGradient(0, 0, width, 0);
+  skyDepth.addColorStop(0, 'rgba(0,0,0,0.08)');
+  skyDepth.addColorStop(0.5, 'rgba(0,0,0,0)');
+  skyDepth.addColorStop(1, 'rgba(0,0,0,0.08)');
+  ctx.fillStyle = skyDepth;
+  ctx.fillRect(0, 0, width, farY);
+
+  const sideW = getSidePanelWidth(width);
+  const leftEdge = sideW;
+  const rightEdge = width - sideW;
 
   const groundPath = () => {
     ctx.beginPath();
-    ctx.moveTo(width * 0.15, farY);
-    ctx.lineTo(width * 0.85, farY);
+    ctx.moveTo(leftEdge, farY);
+    ctx.lineTo(rightEdge, farY);
     ctx.lineTo(width, height);
     ctx.lineTo(0, height);
     ctx.closePath();
@@ -99,50 +118,110 @@ export function drawBackground(ctx, width, height, state) {
   if (isSnowWeather(weatherId)) {
     const snowGrad = ctx.createLinearGradient(0, farY, 0, height);
     snowGrad.addColorStop(0, '#c8d8e8');
-    snowGrad.addColorStop(0.4, '#e0eaf4');
-    snowGrad.addColorStop(0.8, '#e8eef6');
-    snowGrad.addColorStop(1, '#d8e0ec');
+    snowGrad.addColorStop(0.35, '#e0eaf4');
+    snowGrad.addColorStop(0.75, '#e8eef6');
+    snowGrad.addColorStop(1, '#d0dae6');
     ctx.fillStyle = snowGrad;
     groundPath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = '#d0dce8';
-    ctx.fillRect(0, farY, width * 0.15, height - farY);
-    ctx.fillRect(width * 0.85, farY, width * 0.15, height - farY);
+    drawSidePanels(ctx, 0, width, farY, height, sideW, 'snow');
   } else if (isRainWeather(weatherId)) {
     const wetGrad = ctx.createLinearGradient(0, farY, 0, height);
     wetGrad.addColorStop(0, '#3d6b4d');
-    wetGrad.addColorStop(0.5, '#355d42');
-    wetGrad.addColorStop(1, '#2a4d38');
+    wetGrad.addColorStop(0.4, '#355d42');
+    wetGrad.addColorStop(0.85, '#2a4d38');
+    wetGrad.addColorStop(1, '#243d2e');
     ctx.fillStyle = wetGrad;
     groundPath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = '#355d42';
-    ctx.fillRect(0, farY, width * 0.15, height - farY);
-    ctx.fillRect(width * 0.85, farY, width * 0.15, height - farY);
+    drawSidePanels(ctx, 0, width, farY, height, sideW, 'rain');
     drawPuddles(ctx, width, height, farY);
   } else {
     const groundGrad = ctx.createLinearGradient(0, farY, 0, height);
-    groundGrad.addColorStop(0, '#5a8c69');
-    groundGrad.addColorStop(0.6, '#4a7c59');
-    groundGrad.addColorStop(1, '#3a6b49');
+    groundGrad.addColorStop(0, '#5e9070');
+    groundGrad.addColorStop(0.35, '#528a62');
+    groundGrad.addColorStop(0.7, '#427a52');
+    groundGrad.addColorStop(1, '#356945');
     ctx.fillStyle = groundGrad;
     groundPath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = '#4a7c59';
-    ctx.fillRect(0, farY, width * 0.15, height - farY);
-    ctx.fillRect(width * 0.85, farY, width * 0.15, height - farY);
+    const nearBand = ctx.createLinearGradient(0, height - 80, 0, height);
+    nearBand.addColorStop(0, 'rgba(0,0,0,0)');
+    nearBand.addColorStop(0.5, 'rgba(0,0,0,0.06)');
+    nearBand.addColorStop(1, 'rgba(0,0,0,0.12)');
+    ctx.fillStyle = nearBand;
+    groundPath();
+    ctx.fill();
+    drawSidePanels(ctx, 0, width, farY, height, sideW, 'grass');
   }
 
   drawMapDetails(ctx, width, height, farY, state);
+}
+
+/** 左右两侧草地/雪地：渐变营造立体感，宽屏下不会过宽。 */
+function drawSidePanels(ctx, x0, width, farY, height, sideW, weather) {
+  const panelH = height - farY;
+  if (weather === 'snow') {
+    const leftGrad = ctx.createLinearGradient(0, farY, sideW, farY);
+    leftGrad.addColorStop(0, '#b8c8d8');
+    leftGrad.addColorStop(1, '#8a9aaa');
+    ctx.fillStyle = leftGrad;
+    ctx.fillRect(0, farY, sideW, panelH);
+    const rightGrad = ctx.createLinearGradient(width - sideW, farY, width, farY);
+    rightGrad.addColorStop(0, '#8a9aaa');
+    rightGrad.addColorStop(1, '#b8c8d8');
+    ctx.fillStyle = rightGrad;
+    ctx.fillRect(width - sideW, farY, sideW, panelH);
+    const vertGrad = ctx.createLinearGradient(0, farY, 0, height);
+    vertGrad.addColorStop(0, 'rgba(255,255,255,0.1)');
+    vertGrad.addColorStop(1, 'rgba(0,0,0,0.08)');
+    ctx.fillStyle = vertGrad;
+    ctx.fillRect(0, farY, sideW, panelH);
+    ctx.fillRect(width - sideW, farY, sideW, panelH);
+  } else if (weather === 'rain') {
+    const leftGrad = ctx.createLinearGradient(0, farY, sideW, farY);
+    leftGrad.addColorStop(0, '#355d42');
+    leftGrad.addColorStop(1, '#2a4535');
+    ctx.fillStyle = leftGrad;
+    ctx.fillRect(0, farY, sideW, panelH);
+    const rightGrad = ctx.createLinearGradient(width - sideW, farY, width, farY);
+    rightGrad.addColorStop(0, '#2a4535');
+    rightGrad.addColorStop(1, '#355d42');
+    ctx.fillStyle = rightGrad;
+    ctx.fillRect(width - sideW, farY, sideW, panelH);
+    const vertGrad = ctx.createLinearGradient(0, farY, 0, height);
+    vertGrad.addColorStop(0, 'rgba(255,255,255,0.04)');
+    vertGrad.addColorStop(1, 'rgba(0,0,0,0.1)');
+    ctx.fillStyle = vertGrad;
+    ctx.fillRect(0, farY, sideW, panelH);
+    ctx.fillRect(width - sideW, farY, sideW, panelH);
+  } else {
+    const leftGrad = ctx.createLinearGradient(0, farY, sideW, farY);
+    leftGrad.addColorStop(0, '#4a7c59');
+    leftGrad.addColorStop(1, '#3a5c45');
+    ctx.fillStyle = leftGrad;
+    ctx.fillRect(0, farY, sideW, panelH);
+    const rightGrad = ctx.createLinearGradient(width - sideW, farY, width, farY);
+    rightGrad.addColorStop(0, '#3a5c45');
+    rightGrad.addColorStop(1, '#4a7c59');
+    ctx.fillStyle = rightGrad;
+    ctx.fillRect(width - sideW, farY, sideW, panelH);
+    const vertGrad = ctx.createLinearGradient(0, farY, 0, height);
+    vertGrad.addColorStop(0, 'rgba(255,255,255,0.06)');
+    vertGrad.addColorStop(1, 'rgba(0,0,0,0.1)');
+    ctx.fillStyle = vertGrad;
+    ctx.fillRect(0, farY, sideW, panelH);
+    ctx.fillRect(width - sideW, farY, sideW, panelH);
+  }
 }
 
 function drawPuddles(ctx, width, height, farY) {
@@ -205,37 +284,45 @@ function drawMapDetails(ctx, width, height, farY, state) {
 
   const roadBottom = height - 20;
   const roadTopY = farY + (height - farY) * 0.35;
-  const roadWide = width * 0.22;
-  const roadNarrow = width * 0.08;
+  const roadWide = Math.min(width * 0.22, 320);
+  const roadNarrow = Math.min(width * 0.08, 100);
+  const cxRoad = width / 2;
   ctx.beginPath();
-  ctx.moveTo(width / 2 - roadWide, roadBottom);
-  ctx.lineTo(width / 2 + roadWide, roadBottom);
-  ctx.lineTo(width / 2 + roadNarrow, roadTopY);
-  ctx.lineTo(width / 2 - roadNarrow, roadTopY);
+  ctx.moveTo(cxRoad - roadWide, roadBottom);
+  ctx.lineTo(cxRoad + roadWide, roadBottom);
+  ctx.lineTo(cxRoad + roadNarrow, roadTopY);
+  ctx.lineTo(cxRoad - roadNarrow, roadTopY);
   ctx.closePath();
 
   if (snow) {
     const roadGrad = ctx.createLinearGradient(0, roadBottom, 0, roadTopY);
-    roadGrad.addColorStop(0, '#b8c8d8');
-    roadGrad.addColorStop(0.6, '#d0dce8');
-    roadGrad.addColorStop(1, '#c0d0e0');
+    roadGrad.addColorStop(0, '#9aacbc');
+    roadGrad.addColorStop(0.4, '#c0d0e0');
+    roadGrad.addColorStop(0.8, '#d4e0ee');
+    roadGrad.addColorStop(1, '#b8c8d8');
     ctx.fillStyle = roadGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   } else if (rain) {
-    ctx.fillStyle = '#3a3025';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  } else {
-    const roadGrad = ctx.createLinearGradient(width / 2 - roadWide, 0, width / 2 + roadWide, 0);
-    roadGrad.addColorStop(0, '#4a3a2a');
-    roadGrad.addColorStop(0.5, '#6b5a4a');
-    roadGrad.addColorStop(1, '#4a3a2a');
+    const roadGrad = ctx.createLinearGradient(cxRoad - roadWide, 0, cxRoad + roadWide, 0);
+    roadGrad.addColorStop(0, '#2a2520');
+    roadGrad.addColorStop(0.5, '#3a3025');
+    roadGrad.addColorStop(1, '#2a2520');
     ctx.fillStyle = roadGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  } else {
+    const roadGrad = ctx.createLinearGradient(cxRoad - roadWide, 0, cxRoad + roadWide, 0);
+    roadGrad.addColorStop(0, '#3d3025');
+    roadGrad.addColorStop(0.35, '#5a4a38');
+    roadGrad.addColorStop(0.5, '#6b5a4a');
+    roadGrad.addColorStop(0.65, '#5a4a38');
+    roadGrad.addColorStop(1, '#3d3025');
+    ctx.fillStyle = roadGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
   }
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
   const rocks = [
@@ -343,266 +430,225 @@ export function drawCastle(ctx, level = 1) {
   drawCastleLevel5(ctx, cx, cy, towerW, towerH);
 }
 
-function drawCastleBase(ctx, cx, cy, extraRing) {
-  const rx = CASTLE_BASE_RX;
-  const ry = CASTLE_BASE_RY;
-  const baseGrad = ctx.createRadialGradient(cx - rx * 0.3, cy - ry * 0.2, 0, cx, cy, rx * 1.2);
-  baseGrad.addColorStop(0, '#5c5c5c');
-  baseGrad.addColorStop(0.6, '#4a4a4a');
-  baseGrad.addColorStop(1, '#383838');
-  ctx.fillStyle = baseGrad;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#2a2a2a';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  if (extraRing) {
-    ctx.fillStyle = '#3a3a3a';
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + 8, rx - 5, ry - 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-}
-
-function drawCastleRoof(ctx, cx, cy, towerW, towerH) {
-  const roofGrad = ctx.createLinearGradient(cx, cy - towerH - 22, cx, cy - towerH);
-  roofGrad.addColorStop(0, '#5a4030');
-  roofGrad.addColorStop(0.4, '#4a3424');
-  roofGrad.addColorStop(1, '#3d2817');
+function drawCastleRoof(ctx, cx, cy, towerW, towerH, style) {
+  const roofH = style === 'tall' ? 28 : 22;
+  const roofGrad = ctx.createLinearGradient(cx, cy - towerH - roofH, cx, cy - towerH + 4);
+  roofGrad.addColorStop(0, '#6b5344');
+  roofGrad.addColorStop(0.3, '#5a4538');
+  roofGrad.addColorStop(0.7, '#4a3828');
+  roofGrad.addColorStop(1, '#3d2e20');
   ctx.fillStyle = roofGrad;
   ctx.beginPath();
-  ctx.moveTo(cx - towerW / 2 - 5, cy - towerH);
-  ctx.lineTo(cx, cy - towerH - 22);
-  ctx.lineTo(cx + towerW / 2 + 5, cy - towerH);
+  ctx.moveTo(cx - towerW / 2 - 4, cy - towerH);
+  ctx.lineTo(cx, cy - towerH - roofH);
+  ctx.lineTo(cx + towerW / 2 + 4, cy - towerH);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = '#2a1810';
+  ctx.strokeStyle = '#2a2018';
   ctx.lineWidth = 1.5;
   ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.beginPath();
+  ctx.moveTo(cx - towerW / 2 - 2, cy - towerH);
+  ctx.lineTo(cx - towerW / 4, cy - towerH - roofH * 0.6);
+  ctx.lineTo(cx, cy - towerH);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawCastleFlag(ctx, cx, cy, towerH, big) {
-  const poleTop = cy - towerH - (big ? 28 : 22);
-  ctx.strokeStyle = '#3a3028';
+  const roofH = big ? 28 : 22;
+  const poleTop = cy - towerH - roofH - (big ? 10 : 6);
+  ctx.strokeStyle = '#4a4035';
   ctx.lineWidth = big ? 2.5 : 2;
   ctx.beginPath();
-  ctx.moveTo(cx, poleTop + (big ? 18 : 14));
-  ctx.lineTo(cx, cy - towerH - (big ? 12 : 8));
+  ctx.moveTo(cx, poleTop + (big ? 20 : 16));
+  ctx.lineTo(cx, cy - towerH - roofH + 4);
   ctx.stroke();
-  ctx.fillStyle = '#8b0000';
+  const fw = big ? 16 : 12;
+  const fh = big ? 10 : 8;
+  const flagGrad = ctx.createLinearGradient(cx, cy - towerH - roofH, cx + fw, cy - towerH - roofH);
+  flagGrad.addColorStop(0, '#a02020');
+  flagGrad.addColorStop(1, '#6a1010');
+  ctx.fillStyle = flagGrad;
   ctx.beginPath();
-  const fw = big ? 14 : 10;
-  ctx.moveTo(cx, cy - towerH - (big ? 22 : 18));
-  ctx.lineTo(cx + fw, cy - towerH - (big ? 18 : 14));
-  ctx.lineTo(cx, cy - towerH - (big ? 14 : 10));
+  ctx.moveTo(cx, cy - towerH - roofH - (big ? 4 : 2));
+  ctx.lineTo(cx + fw, cy - towerH - roofH - fh / 2);
+  ctx.lineTo(cx, cy - towerH - roofH + (big ? 4 : 2));
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = '#6a0000';
+  ctx.strokeStyle = '#4a1010';
   ctx.lineWidth = 1;
   ctx.stroke();
 }
 
-function drawCastleLevel1(ctx, cx, cy, towerW, towerH) {
-  const rx = CASTLE_BASE_RX;
-  const ry = CASTLE_BASE_RY;
-
-  // Shadow under base
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + ry + 4, rx * 1.05, 8, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Base: stone ellipse with gradient
-  const baseGrad = ctx.createRadialGradient(cx - rx * 0.25, cy - ry * 0.2, 0, cx, cy, rx * 1.15);
-  baseGrad.addColorStop(0, '#5a5a5a');
-  baseGrad.addColorStop(0.5, '#4a4a4a');
-  baseGrad.addColorStop(1, '#383838');
-  ctx.fillStyle = baseGrad;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#2a2a2a';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Base rim (darker band)
-  ctx.strokeStyle = '#323232';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx - 2, ry - 1, 0, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Simple gate/door hint (dark arch)
-  ctx.fillStyle = '#2a2a2a';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 4, 14, 12, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = '#3a3a3a';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 2, 10, 8, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Tower: gradient for depth (lighter left = light source)
-  const towerGrad = ctx.createLinearGradient(cx - towerW / 2, 0, cx + towerW / 2, 0);
-  towerGrad.addColorStop(0, '#6a6a6a');
-  towerGrad.addColorStop(0.35, '#5a5a5a');
-  towerGrad.addColorStop(0.65, '#505050');
-  towerGrad.addColorStop(1, '#454545');
-  ctx.fillStyle = towerGrad;
+function drawTowerBlock(ctx, cx, cy, towerW, towerH, stoneColor) {
+  const grad = ctx.createLinearGradient(cx - towerW / 2, 0, cx + towerW / 2, 0);
+  grad.addColorStop(0, stoneColor.light);
+  grad.addColorStop(0.4, stoneColor.mid);
+  grad.addColorStop(0.6, stoneColor.mid);
+  grad.addColorStop(1, stoneColor.dark);
+  ctx.fillStyle = grad;
   ctx.fillRect(cx - towerW / 2, cy - towerH, towerW, towerH);
-  ctx.strokeStyle = '#3a3a3a';
+  ctx.strokeStyle = stoneColor.stroke;
   ctx.lineWidth = 1.5;
   ctx.strokeRect(cx - towerW / 2, cy - towerH, towerW, towerH);
-
-  // Tower front edge highlight
-  ctx.strokeStyle = 'rgba(120,120,120,0.5)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(cx - towerW / 2, cy - towerH);
   ctx.lineTo(cx - towerW / 2, cy);
   ctx.stroke();
-
-  // One small window
-  ctx.fillStyle = '#2a3540';
-  ctx.fillRect(cx - 5, cy - towerH * 0.55, 10, 12);
-  ctx.strokeStyle = '#1a2028';
-  ctx.strokeRect(cx - 5, cy - towerH * 0.55, 10, 12);
-  ctx.fillStyle = 'rgba(180,200,255,0.4)';
-  ctx.fillRect(cx - 4, cy - towerH * 0.55 + 1, 8, 10);
-
-  // Roof with gradient
-  drawCastleRoof(ctx, cx, cy, towerW, towerH);
-
-  // Flag pole + flag
-  drawCastleFlag(ctx, cx, cy, towerH);
 }
 
-/** 2 级：有底座环与主塔，两侧各一小翼（可站 1 弓箭手） */
+/** 1 级：无底座，主塔落地 + 底部门 + 屋顶 + 旗 */
+function drawCastleLevel1(ctx, cx, cy, towerW, towerH) {
+  const stone = { light: '#7a7e82', mid: '#5e6266', dark: '#464a4e', stroke: '#3a3e42' };
+  drawTowerBlock(ctx, cx, cy, towerW, towerH, stone);
+  ctx.fillStyle = '#1e2228';
+  ctx.fillRect(cx - 6, cy - 18, 12, 16);
+  ctx.strokeStyle = '#2a2e34';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cx - 6, cy - 18, 12, 16);
+  ctx.fillStyle = 'rgba(180,200,255,0.25)';
+  ctx.fillRect(cx - 5, cy - 17, 10, 14);
+  ctx.fillStyle = '#2c3038';
+  ctx.fillRect(cx - 4, cy - towerH * 0.5, 8, 10);
+  ctx.strokeStyle = '#1a1e26';
+  ctx.strokeRect(cx - 4, cy - towerH * 0.5, 8, 10);
+  ctx.fillStyle = 'rgba(200,220,255,0.35)';
+  ctx.fillRect(cx - 3, cy - towerH * 0.5 + 1, 6, 8);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH, 'normal');
+  drawCastleFlag(ctx, cx, cy, towerH, false);
+}
+
+/** 2 级：主塔落地 + 两侧小翼 */
 function drawCastleLevel2(ctx, cx, cy, towerW, towerH) {
-  drawCastleBase(ctx, cx, cy, true);
   drawMainTower(ctx, cx, cy, towerW, towerH, 1);
-  drawCastleRoof(ctx, cx, cy, towerW, towerH);
-  drawCastleFlag(ctx, cx, cy, towerH);
-  const wingW = 12;
-  const wingH = 28;
-  ctx.fillStyle = '#525a5a';
-  ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 20, wingW, wingH);
-  ctx.strokeRect(cx - towerW / 2 - wingW - 2, cy - towerH + 20, wingW, wingH);
-  ctx.fillRect(cx + towerW / 2 + 2, cy - towerH + 20, wingW, wingH);
-  ctx.strokeRect(cx + towerW / 2 + 2, cy - towerH + 20, wingW, wingH);
-}
-
-/** 3 级：主塔更高，两窗，两侧翼稍大 */
-function drawCastleLevel3(ctx, cx, cy, towerW, towerH) {
-  drawCastleBase(ctx, cx, cy, true);
-  drawMainTower(ctx, cx, cy, towerW, towerH, 2);
-  drawCastleRoof(ctx, cx, cy, towerW, towerH);
-  drawCastleFlag(ctx, cx, cy, towerH);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH, 'normal');
+  drawCastleFlag(ctx, cx, cy, towerH, false);
   const wingW = 14;
-  const wingH = 38;
-  ctx.fillStyle = '#5a6262';
-  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 12, wingW, wingH);
-  ctx.strokeRect(cx - towerW / 2 - wingW - 4, cy - towerH + 12, wingW, wingH);
-  ctx.fillRect(cx + towerW / 2 + 4, cy - towerH + 12, wingW, wingH);
-  ctx.strokeRect(cx + towerW / 2 + 4, cy - towerH + 12, wingW, wingH);
-  ctx.fillStyle = '#3a4048';
-  ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 22, 6, 8);
-  ctx.fillRect(cx + towerW / 2 + 8, cy - towerH + 22, 6, 8);
+  const wingH = 30;
+  const wingGrad = ctx.createLinearGradient(cx - towerW / 2 - wingW, 0, cx - towerW / 2, 0);
+  wingGrad.addColorStop(0, '#5a5e62');
+  wingGrad.addColorStop(1, '#4a4e52');
+  ctx.fillStyle = wingGrad;
+  ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 18, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 2, cy - towerH + 18, wingW, wingH);
+  ctx.fillStyle = wingGrad;
+  ctx.fillRect(cx + towerW / 2 + 2, cy - towerH + 18, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 2, cy - towerH + 18, wingW, wingH);
 }
 
-/** 4 级：主塔更多砖纹与窗，两侧翼带垛口 */
+/** 3 级：主塔两窗，两侧翼稍大 */
+function drawCastleLevel3(ctx, cx, cy, towerW, towerH) {
+  drawMainTower(ctx, cx, cy, towerW, towerH, 2);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH, 'normal');
+  drawCastleFlag(ctx, cx, cy, towerH, false);
+  const wingW = 16;
+  const wingH = 40;
+  const wingGrad = ctx.createLinearGradient(cx - towerW / 2 - wingW, 0, cx - towerW / 2, 0);
+  wingGrad.addColorStop(0, '#5e6266');
+  wingGrad.addColorStop(1, '#4e5256');
+  ctx.fillStyle = wingGrad;
+  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 10, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 4, cy - towerH + 10, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 4, cy - towerH + 10, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 4, cy - towerH + 10, wingW, wingH);
+  ctx.fillStyle = '#2a2e34';
+  ctx.fillRect(cx - towerW / 2 - wingW, cy - towerH + 22, 6, 8);
+  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 22, 6, 8);
+}
+
+/** 4 级：主塔多窗，两侧翼带垛口 */
 function drawCastleLevel4(ctx, cx, cy, towerW, towerH) {
-  drawCastleBase(ctx, cx, cy, true);
   drawMainTower(ctx, cx, cy, towerW, towerH, 3);
-  drawCastleRoof(ctx, cx, cy, towerW, towerH);
-  drawCastleFlag(ctx, cx, cy, towerH);
-  const wingW = 18;
-  const wingH = 48;
-  ctx.fillStyle = '#5c6464';
-  ctx.fillRect(cx - towerW / 2 - wingW - 6, cy - towerH + 8, wingW, wingH);
-  ctx.strokeRect(cx - towerW / 2 - wingW - 6, cy - towerH + 8, wingW, wingH);
-  ctx.fillRect(cx + towerW / 2 + 6, cy - towerH + 8, wingW, wingH);
-  ctx.strokeRect(cx + towerW / 2 + 6, cy - towerH + 8, wingW, wingH);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH, 'normal');
+  drawCastleFlag(ctx, cx, cy, towerH, false);
+  const wingW = 20;
+  const wingH = 50;
+  const wingGrad = ctx.createLinearGradient(cx - towerW / 2 - wingW, 0, cx - towerW / 2, 0);
+  wingGrad.addColorStop(0, '#62666a');
+  wingGrad.addColorStop(1, '#505458');
+  ctx.fillStyle = wingGrad;
+  ctx.fillRect(cx - towerW / 2 - wingW - 6, cy - towerH + 6, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 6, cy - towerH + 6, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 6, cy - towerH + 6, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 6, cy - towerH + 6, wingW, wingH);
   for (let k = 0; k < 2; k++) {
     const sx = k === 0 ? cx - towerW / 2 - wingW - 6 : cx + towerW / 2 + 6;
-    ctx.fillStyle = '#4a5050';
-    for (let i = 0; i < 4; i++) {
-      ctx.fillRect(sx + 2 + i * 4, cy - towerH + 6, 2, 4);
-    }
+    ctx.fillStyle = '#484c50';
+    for (let i = 0; i < 4; i++) ctx.fillRect(sx + 3 + i * 5, cy - towerH + 4, 3, 5);
   }
-  ctx.fillStyle = '#3a4048';
+  ctx.fillStyle = '#2a2e34';
   ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 20, 8, 10);
-  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 20, 8, 10);
+  ctx.fillRect(cx + towerW / 2 + 12, cy - towerH + 20, 8, 10);
 }
 
-/** 5 级：完整要塞，主塔与双翼带垛口，旗更大 */
+/** 5 级：完整要塞，大旗 */
 function drawCastleLevel5(ctx, cx, cy, towerW, towerH) {
-  drawCastleBase(ctx, cx, cy, true);
-  ctx.fillStyle = '#363a3a';
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 4, CASTLE_BASE_RX - 8, CASTLE_BASE_RY - 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
   drawMainTower(ctx, cx, cy, towerW, towerH, 4);
-  drawCastleRoof(ctx, cx, cy, towerW, towerH);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH, 'tall');
   drawCastleFlag(ctx, cx, cy, towerH, true);
-  const wingW = 22;
-  const wingH = 58;
-  ctx.fillStyle = '#5e6666';
-  ctx.fillRect(cx - towerW / 2 - wingW - 8, cy - towerH + 4, wingW, wingH);
-  ctx.strokeRect(cx - towerW / 2 - wingW - 8, cy - towerH + 4, wingW, wingH);
-  ctx.fillRect(cx + towerW / 2 + 8, cy - towerH + 4, wingW, wingH);
-  ctx.strokeRect(cx + towerW / 2 + 8, cy - towerH + 4, wingW, wingH);
+  const wingW = 24;
+  const wingH = 60;
+  const wingGrad = ctx.createLinearGradient(cx - towerW / 2 - wingW, 0, cx - towerW / 2, 0);
+  wingGrad.addColorStop(0, '#666a6e');
+  wingGrad.addColorStop(1, '#52565a');
+  ctx.fillStyle = wingGrad;
+  ctx.fillRect(cx - towerW / 2 - wingW - 8, cy - towerH + 2, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 8, cy - towerH + 2, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 8, cy - towerH + 2, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 8, cy - towerH + 2, wingW, wingH);
   for (let k = 0; k < 2; k++) {
     const sx = k === 0 ? cx - towerW / 2 - wingW - 8 : cx + towerW / 2 + 8;
-    ctx.fillStyle = '#4a5252';
-    for (let i = 0; i < 5; i++) {
-      ctx.fillRect(sx + 2 + i * 4, cy - towerH + 2, 2, 5);
-    }
+    ctx.fillStyle = '#4a4e52';
+    for (let i = 0; i < 5; i++) ctx.fillRect(sx + 3 + i * 5, cy - towerH, 3, 6);
   }
-  ctx.fillStyle = '#3a4048';
+  ctx.fillStyle = '#2a2e34';
   ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 16, 10, 12);
-  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 36, 10, 12);
-  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 16, 10, 12);
-  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 36, 10, 12);
+  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 38, 10, 12);
+  ctx.fillRect(cx + towerW / 2 + 12, cy - towerH + 16, 10, 12);
+  ctx.fillRect(cx + towerW / 2 + 12, cy - towerH + 38, 10, 12);
 }
 
-/** 主塔：砖纹 + 若干窗户 */
+/** 主塔：石墙渐变 + 砖纹 + 窗户 */
 function drawMainTower(ctx, cx, cy, towerW, towerH, windowCount) {
   const towerGrad = ctx.createLinearGradient(cx - towerW / 2, 0, cx + towerW / 2, 0);
-  towerGrad.addColorStop(0, '#6a6e6e');
-  towerGrad.addColorStop(0.4, '#5a5e5e');
-  towerGrad.addColorStop(0.6, '#525656');
-  towerGrad.addColorStop(1, '#4a4e4e');
+  towerGrad.addColorStop(0, '#787c80');
+  towerGrad.addColorStop(0.35, '#5e6266');
+  towerGrad.addColorStop(0.65, '#54585c');
+  towerGrad.addColorStop(1, '#464a4e');
   ctx.fillStyle = towerGrad;
   ctx.fillRect(cx - towerW / 2, cy - towerH, towerW, towerH);
-  ctx.strokeStyle = '#3a3a3a';
+  ctx.strokeStyle = '#404448';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(cx - towerW / 2, cy - towerH, towerW, towerH);
-  ctx.fillStyle = '#424848';
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - towerW / 2, cy - towerH);
+  ctx.lineTo(cx - towerW / 2, cy);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
   const step = Math.floor(towerW / 10);
-  for (let row = 0; row < Math.floor(towerH / 12); row++) {
+  for (let row = 0; row < Math.floor(towerH / 14); row++) {
     for (let col = 0; col < 4; col++) {
-      const bx = cx - towerW / 2 + 6 + col * (step + 2);
-      const by = cy - towerH + 6 + row * 12;
-      ctx.fillRect(bx, by, 6, 6);
+      const bx = cx - towerW / 2 + 8 + col * (step + 2);
+      const by = cy - towerH + 8 + row * 14;
+      ctx.fillRect(bx, by, 6, 7);
     }
   }
   const winH = 10;
   const winW = 8;
   for (let i = 0; i < windowCount; i++) {
-    const ty = cy - towerH * (0.35 + i * 0.25);
-    ctx.fillStyle = '#2a3038';
+    const ty = cy - towerH * (0.32 + i * 0.24);
+    ctx.fillStyle = '#1e2228';
     ctx.fillRect(cx - winW / 2, ty, winW, winH);
+    ctx.strokeStyle = '#2a2e34';
+    ctx.lineWidth = 1;
     ctx.strokeRect(cx - winW / 2, ty, winW, winH);
-    ctx.fillStyle = 'rgba(180,200,255,0.35)';
+    ctx.fillStyle = 'rgba(190,210,255,0.4)';
     ctx.fillRect(cx - winW / 2 + 1, ty + 1, winW - 2, winH - 2);
   }
 }

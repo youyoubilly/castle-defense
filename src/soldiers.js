@@ -16,14 +16,17 @@ const FORMATION_SNAP_DIST = 6;
 const HEAL_RATE = 2;
 const SOLDIER_ARCHER_RANGE = 200;
 const SOLDIER_ARCHER_INTERVAL = 42;
+const SOLDIER_MAGE_RANGE = 220;
+const SOLDIER_MAGE_INTERVAL = 50;
 const INFIRMARY_OFFSET_Y = 35;
 
-/** 士兵职业：卫兵(基础) 可升级为 战士/弓箭手/圣骑士 */
+/** 士兵职业：卫兵(基础) 可升级为 战士/弓箭手/圣骑士/魔法师 */
 export const SOLDIER_CLASSES = {
-  guard: { name: '卫兵', attack: 20, defense: 5, maxHp: 250 },
-  warrior: { name: '战士', attack: 34, defense: 4, maxHp: 220 },
-  archer: { name: '弓箭手', attack: 26, defense: 3, maxHp: 180 },
-  paladin: { name: '圣骑士', attack: 24, defense: 16, maxHp: 320 },
+  guard: { name: '卫兵', attack: 20, defense: 5, maxHp: 250, magicAttack: 0 },
+  warrior: { name: '战士', attack: 34, defense: 4, maxHp: 220, magicAttack: 0 },
+  archer: { name: '弓箭手', attack: 26, defense: 3, maxHp: 180, magicAttack: 0 },
+  paladin: { name: '圣骑士', attack: 24, defense: 16, maxHp: 320, magicAttack: 0 },
+  mage: { name: '魔法师', attack: 12, defense: 2, maxHp: 160, magicAttack: 36 },
 };
 
 /** 卫兵升级到其他职业的金币消耗 */
@@ -31,13 +34,14 @@ export const UPGRADE_COSTS = {
   warrior: 80,
   archer: 100,
   paladin: 120,
+  mage: 110,
 };
 
 export function getSoldierClassName(classId) {
   return SOLDIER_CLASSES[classId]?.name ?? '卫兵';
 }
 
-/** 当前职业基础属性 + 全局加成 */
+/** 当前职业基础属性 + 全局加成（含魔法攻击） */
 export function getSoldierClassStats(classId, state) {
   const c = SOLDIER_CLASSES[classId] || SOLDIER_CLASSES.guard;
   return {
@@ -45,6 +49,7 @@ export function getSoldierClassStats(classId, state) {
     attack: c.attack + (state.soldierAttackBonus ?? 0),
     defense: c.defense + (state.soldierDefenseBonus ?? 0),
     maxHp: c.maxHp + (state.soldierHpBonus ?? 0),
+    magicAttack: (c.magicAttack ?? 0),
   };
 }
 
@@ -55,6 +60,7 @@ export function getUpgradeOptions(soldier) {
     { class: 'warrior', name: '战士', cost: UPGRADE_COSTS.warrior },
     { class: 'archer', name: '弓箭手', cost: UPGRADE_COSTS.archer },
     { class: 'paladin', name: '圣骑士', cost: UPGRADE_COSTS.paladin },
+    { class: 'mage', name: '魔法师', cost: UPGRADE_COSTS.mage },
   ];
 }
 
@@ -71,6 +77,7 @@ export function upgradeSoldierTo(state, soldier, newClassId) {
   soldier.maxHp = stats.maxHp;
   soldier.hp = Math.min(soldier.hp, soldier.maxHp);
   soldier.name = stats.name;
+  soldier.magicAttack = stats.magicAttack ?? 0;
   return true;
 }
 
@@ -95,6 +102,7 @@ export function createSoldiers(state) {
       maxHp: stats.maxHp,
       attack: stats.attack,
       defense: stats.defense,
+      magicAttack: stats.magicAttack ?? 0,
       name: stats.name,
       status: 'field',
       formationIndex: i,
@@ -124,6 +132,7 @@ export function addSoldier(state) {
     maxHp: stats.maxHp,
     attack: stats.attack,
     defense: stats.defense,
+    magicAttack: stats.magicAttack ?? 0,
     name: stats.name,
     status: 'field',
     formationIndex: count,
@@ -158,6 +167,8 @@ export function updateSoldierPositions(state) {
 
     const formationX = startX + (s.formationIndex ?? i) * SOLDIER_SPACING;
     const isArcher = (s.class || 'guard') === 'archer';
+    const isMage = (s.class || 'guard') === 'mage';
+    const isRanged = isArcher || isMage;
 
     const aliveEnemies = (state.enemies || []).filter((e) => e.alive);
     let nearest = null;
@@ -171,7 +182,7 @@ export function updateSoldierPositions(state) {
       }
     }
 
-    if (nearest && !isArcher) {
+    if (nearest && !isRanged) {
       const distToEnemy = Math.hypot(nearest.x - s.x, nearest.y - s.y);
       if (distToEnemy > attackRange) {
         const dx = nearest.x - s.x;
@@ -220,7 +231,33 @@ export function applySoldierArcherShoot(state) {
     if (!nearest) continue;
 
     const damage = s.attack ?? 26;
-    spawnArrowFrom(state, s.x, s.y, nearest, damage);
+    spawnArrowFrom(state, s.x, s.y, nearest, damage, false);
+    s.lastArrowFrame = frame;
+  }
+}
+
+/** 士兵魔法师：远程魔法弹，伤害受敌方魔法防御减免 */
+export function applySoldierMageShoot(state) {
+  const frame = state.frameCount || 0;
+  const soldiers = state.soldiers || [];
+  const enemies = (state.enemies || []).filter((e) => e.alive);
+
+  for (const s of soldiers) {
+    if ((s.class || 'guard') !== 'mage' || s.status !== 'field') continue;
+    if ((frame - (s.lastArrowFrame || 0)) < SOLDIER_MAGE_INTERVAL) continue;
+
+    let nearest = null;
+    let nearestDist = SOLDIER_MAGE_RANGE;
+    for (const e of enemies) {
+      const d = Math.hypot(e.x - s.x, e.y - s.y);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = e;
+      }
+    }
+    if (!nearest) continue;
+
+    spawnArrowFrom(state, s.x, s.y, nearest, s.magicAttack ?? 36, true);
     s.lastArrowFrame = frame;
   }
 }
@@ -358,7 +395,7 @@ export function drawSoldiers(ctx, state) {
     ctx.lineTo(x - 8, y + 5);
     ctx.stroke();
 
-    // Weapon: sword (guard/warrior/paladin) or bow (archer)
+    // Weapon: sword (guard/warrior/paladin), bow (archer), staff (mage)
     if (sc === 'archer') {
       ctx.strokeStyle = '#5a4a3a';
       ctx.lineWidth = 1.8;
@@ -368,6 +405,21 @@ export function drawSoldiers(ctx, state) {
       ctx.beginPath();
       ctx.moveTo(x + 2, y - 1);
       ctx.lineTo(x + 10, y + 3);
+      ctx.stroke();
+    } else if (sc === 'mage') {
+      ctx.strokeStyle = '#3a3050';
+      ctx.fillStyle = '#5a5080';
+      ctx.lineWidth = 1.8;
+      const staffTopX = x + 4;
+      const staffTopY = y - 10;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + 4);
+      ctx.lineTo(staffTopX, staffTopY);
+      ctx.stroke();
+      ctx.fillStyle = '#7a6ab0';
+      ctx.beginPath();
+      ctx.arc(staffTopX, staffTopY, 4, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
     } else {
       const swordLen = sc === 'warrior' ? 14 : 10;
@@ -406,8 +458,8 @@ export function drawSoldiers(ctx, state) {
     ctx.lineTo(x + 6 + rightSwing * 0.9, footY);
     ctx.stroke();
 
-    // Shield (archer has no shield; paladin has larger golden shield)
-    if (sc !== 'archer') {
+    // Shield (archer/mage no shield; paladin has larger golden shield)
+    if (sc !== 'archer' && sc !== 'mage') {
       const shieldW = sc === 'paladin' ? 14 : 10;
       const shieldH = sc === 'paladin' ? 18 : 14;
       ctx.fillStyle = sc === 'paladin' ? '#8a7a4a' : '#5a6a8a';

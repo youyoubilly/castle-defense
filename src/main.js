@@ -15,6 +15,8 @@ import {
   upgradeSkill,
   canUseSkillInWeather,
   getSkillWeatherReason,
+  getMechanicalSkillGoldCost,
+  isMechanicalSkill,
   SKILL_IDS,
   SKILL_MAX_LEVEL,
 } from './magic.js';
@@ -172,23 +174,29 @@ function main() {
 
   function updateMagicButtons() {
     const ids = SKILL_KEYS;
+    const gold = state.gold ?? 0;
     ids.forEach((skillId, i) => {
       const btn = document.getElementById(btnIds[i]);
       if (!btn) return;
       const rem = getSkillCooldownRemaining(state, skillId);
       const canUseWeather = canUseSkillInWeather(state, skillId);
       const weatherReason = getSkillWeatherReason(state, skillId);
-      btn.disabled = rem > 0 || !canUseWeather;
+      const mechCost = getMechanicalSkillGoldCost(skillId);
+      const canAfford = mechCost <= 0 || gold >= mechCost;
+      btn.disabled = rem > 0 || !canUseWeather || !canAfford;
       const name = getSkillName(skillId);
       const lv = getSkillLevel(state, skillId);
       if (rem > 0) {
         btn.textContent = `${name} ${Math.ceil(rem / 1000)}s`;
       } else if (!canUseWeather && weatherReason) {
         btn.textContent = name + ' ✕';
+      } else if (mechCost > 0 && !canAfford) {
+        btn.textContent = `${name} ${mechCost}金`;
       } else {
         btn.textContent = `${name} [${i + 1}]`;
       }
-      btn.title = weatherReason || (rem > 0 ? `冷却 ${Math.ceil(rem / 1000)}s` : `${name} Lv.${lv} · 键${i + 1}`);
+      const costTip = mechCost > 0 ? ` · 消耗${mechCost}金币` : '';
+      btn.title = weatherReason || (rem > 0 ? `冷却 ${Math.ceil(rem / 1000)}s` : `${name} Lv.${lv} · 键${i + 1}${costTip}`);
       btn.classList.toggle('selected', state.magic?.selectedSkill === skillId);
     });
   }
@@ -262,6 +270,7 @@ function main() {
         if (action === 'life' && (state.castleHealth ?? 10) >= 10) disabled = true;
         if (action === 'soldier' && (state.soldiers?.length ?? 0) >= 8) disabled = true;
         if (action === 'artillery' && (state.artillery?.length ?? 0) >= (state.maxArtillery ?? 2)) disabled = true;
+        if (action === 'spell_support' && state.castleSpellSupport) disabled = true;
         btn.disabled = disabled;
       });
     } else {
@@ -306,6 +315,9 @@ function main() {
       if (action === 'soldier_defense') {
         state.soldierDefenseBonus = (state.soldierDefenseBonus ?? 0) + 2;
         (state.soldiers || []).forEach((s) => { s.defense = (s.defense ?? 5) + 2; });
+      }
+      if (action === 'spell_support') {
+        state.castleSpellSupport = true;
       }
       updateCastlePanel();
     });

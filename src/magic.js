@@ -21,6 +21,20 @@ export const SKILL_IDS = {
 
 export const SKILL_MAX_LEVEL = 5;
 
+/** 机械类技能（导弹、弩炮、齐射）每次施放需消耗金币，同时保留冷却 */
+const MECHANICAL_SKILL_IDS = [SKILL_IDS.MISSILE, SKILL_IDS.BALLISTA, SKILL_IDS.VOLLEY];
+const MECHANICAL_SKILL_GOLD = {
+  [SKILL_IDS.MISSILE]: 35,
+  [SKILL_IDS.BALLISTA]: 45,
+  [SKILL_IDS.VOLLEY]: 28,
+};
+export function isMechanicalSkill(skillId) {
+  return MECHANICAL_SKILL_IDS.includes(skillId);
+}
+export function getMechanicalSkillGoldCost(skillId) {
+  return MECHANICAL_SKILL_GOLD[skillId] ?? 0;
+}
+
 /** 升级到下一级所需金币：Lv1→2=60, 2→3=120, 3→4=200, 4→5=320 */
 export function getSkillUpgradeCost(currentLevel) {
   const costs = [60, 120, 200, 320];
@@ -106,6 +120,11 @@ const VOLLEY_DAMAGE = 18;
 const VOLLEY_SPEED = 14;
 const VOLLEY_HIT_R = 22;
 const VOLLEY_AOE_R = 28;
+
+/** 魔法伤害：受敌方魔法防御减免 */
+function magicDamageRaw(damage, enemy) {
+  return Math.max(1, Math.floor(damage) - (enemy.magicDefense ?? 0));
+}
 
 /** 点到线段 (x1,y1)-(x2,y2) 的距离 */
 function distanceToSegment(px, py, x1, y1, x2, y2) {
@@ -193,12 +212,14 @@ function isOnCooldown(state, skillId) {
   return (state.magic?.cooldownUntil?.[skillId] ?? 0) > Date.now();
 }
 
-/** 冷却时间随等级略微缩短：5级约为基础的 80% */
+/** 冷却时间随等级略微缩短；城堡法术支援可再减 8% */
 function getCooldownMs(state, skillId) {
   const base = COOLDOWN_MS[skillId] ?? 20000;
   const level = getSkillLevel(state, skillId);
   const factor = 1 - (level - 1) * 0.05;
-  return Math.max(base * 0.6, Math.floor(base * factor));
+  let ms = Math.max(base * 0.6, Math.floor(base * factor));
+  if (state.castleSpellSupport) ms = Math.floor(ms * 0.92);
+  return ms;
 }
 
 const WEATHER_RAIN_LIKE = [WEATHER_IDS.RAIN, WEATHER_IDS.HEAVY_RAIN, WEATHER_IDS.THUNDERSTORM, WEATHER_IDS.STORM];
@@ -273,8 +294,14 @@ export function tryCastMagic(state, x, y) {
     m.selectedSkill = null;
     return false;
   }
+  const goldCost = getMechanicalSkillGoldCost(skill);
+  if (goldCost > 0 && (state.gold ?? 0) < goldCost) {
+    m.selectedSkill = null;
+    return false;
+  }
 
   const now = Date.now();
+  if (goldCost > 0) state.gold = (state.gold ?? 0) - goldCost;
   m.cooldownUntil[skill] = now + getCooldownMs(state, skill);
   m.selectedSkill = null;
 
@@ -357,7 +384,7 @@ function castFireRain(state, x, y, weatherMod) {
     if (!e.alive) continue;
     const dist = Math.hypot(e.x - x, e.y - y);
     if (dist <= radius) {
-      const raw = Math.max(1, damage - (e.defense ?? 0));
+      const raw = magicDamageRaw(damage, e);
       e.hp -= raw;
       e.hitFlashUntil = Date.now() + 400;
       e.lastHitCrit = false;
@@ -544,7 +571,7 @@ function castFrostRing(state, x, y, weatherMod) {
     const dist = Math.hypot(e.x - x, e.y - y);
     if (dist <= radius) {
       e.frozenUntil = Math.max(e.frozenUntil || 0, until);
-      e.hp = Math.max(0, (e.hp ?? e.maxHp) - Math.max(1, damage - (e.defense ?? 0)));
+      e.hp = Math.max(0, (e.hp ?? e.maxHp) - magicDamageRaw(damage, e));
       e.hitFlashUntil = Date.now() + 280;
       spawnBloodParticles(state, e.x, e.y, 3);
       if (e.hp <= 0) {
@@ -561,6 +588,7 @@ function castFrostRing(state, x, y, weatherMod) {
   state.magic.frostRings.push({ x, y, radius, castAt: Date.now() });
 }
 
+/** 弩炮每升 1 级可多穿透 1 名敌人（1 级=1 人，5 级=5 人） */
 function castBallista(state, targetX, targetY, weatherMod) {
   const level = getSkillLevel(state, SKILL_IDS.BALLISTA);
   const mult = getSkillMultiplier(level);
@@ -570,6 +598,7 @@ function castBallista(state, targetX, targetY, weatherMod) {
   const dx = targetX - cx;
   const dy = targetY - cy;
   const len = Math.hypot(dx, dy) || 1;
+  const maxHits = Math.max(1, level);
   state.magic.ballistaBolts = state.magic.ballistaBolts || [];
   state.magic.ballistaBolts.push({
     x: cx,
@@ -578,6 +607,8 @@ function castBallista(state, targetX, targetY, weatherMod) {
     vy: (dy / len) * BALLISTA_SPEED,
     damage,
     hit: false,
+    maxHits,
+    hitEnemies: [],
   });
 }
 
@@ -630,7 +661,7 @@ export function updateMagic(state) {
       if (!e.alive) continue;
       const d = Math.hypot(arr.x - e.x, arr.y - e.y);
       if (d < FIRE_ARROW_HIT_R) {
-        const raw = Math.max(1, arr.damage - (e.defense ?? 0));
+        const raw = magicDamageRaw(arr.damage, e);
         e.hp -= raw;
         e.hitFlashUntil = Date.now() + 350;
         e.lastHitCrit = false;
@@ -664,7 +695,7 @@ export function updateMagic(state) {
         if (!e.alive) continue;
         const d = distanceToSegment(e.x, e.y, seg.x1, seg.y1, seg.x2, seg.y2);
         if (d <= halfWidth) {
-          const baseRaw = Math.max(1, (zone.damagePerTick ?? FIRE_SEA_DAMAGE_PER_TICK) - Math.floor((e.defense ?? 0) / 4));
+          const baseRaw = magicDamageRaw(zone.damagePerTick ?? FIRE_SEA_DAMAGE_PER_TICK, e);
           const raw = Math.max(0, Math.floor(baseRaw * zoneLife));
           if (raw > 0) {
             e.hp -= raw;
@@ -768,7 +799,7 @@ export function updateMagic(state) {
       if (!e.alive) continue;
       const d = Math.hypot(arr.x - e.x, arr.y - e.y);
       if (d < ICE_ARROW_HIT_R) {
-        e.hp = Math.max(0, (e.hp ?? e.maxHp) - Math.max(1, arr.damage - (e.defense ?? 0)));
+        e.hp = Math.max(0, (e.hp ?? e.maxHp) - magicDamageRaw(arr.damage, e));
         e.frozenUntil = Math.max(e.frozenUntil || 0, now + (arr.slowMs ?? ICE_ARROW_SLOW_MS));
         e.hitFlashUntil = now + 300;
         spawnBloodParticles(state, e.x, e.y, 3);
@@ -791,9 +822,11 @@ export function updateMagic(state) {
     if (arr.hit) return;
     arr.x += arr.vx;
     arr.y += arr.vy;
+    const hitEnemies = arr.hitEnemies || [];
+    const maxHits = arr.maxHits ?? 1;
     const enemies = state.enemies || [];
     for (const e of enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || hitEnemies.includes(e)) continue;
       const d = Math.hypot(arr.x - e.x, arr.y - e.y);
       if (d < BALLISTA_HIT_R) {
         const raw = Math.max(1, arr.damage - Math.floor((e.defense ?? 0) * 0.5));
@@ -808,8 +841,9 @@ export function updateMagic(state) {
           state.score = (state.score || 0) + 1;
           state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
         }
-        arr.hit = true;
-        return;
+        hitEnemies.push(e);
+        if (hitEnemies.length >= maxHits) arr.hit = true;
+        break;
       }
     }
   });
@@ -855,7 +889,7 @@ export function updateMagic(state) {
     if (!e.alive || !e.burningUntil || e.burningUntil <= now) continue;
     if (now - (e.lastBurnTick || 0) >= BURN_TICK_MS) {
       e.lastBurnTick = now;
-      const raw = Math.max(1, BURN_DOT_DAMAGE - Math.floor((e.defense ?? 0) / 8));
+      const raw = magicDamageRaw(BURN_DOT_DAMAGE, e);
       e.hp -= raw;
       e.hitFlashUntil = Date.now() + 150;
       spawnBloodParticles(state, e.x, e.y, 1);

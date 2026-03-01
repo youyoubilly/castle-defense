@@ -64,13 +64,16 @@ export function updateArcherPositions(state) {
 }
 
 /**
- * Spawn an arrow from (fromX, fromY) toward target enemy. Used by castle archers and soldier archers.
+ * Spawn an arrow from (fromX, fromY) toward target enemy.
+ * isMagic: use target.magicDefense for damage reduction; otherwise physical defense.
  */
-export function spawnArrowFrom(state, fromX, fromY, targetEnemy, damage) {
+export function spawnArrowFrom(state, fromX, fromY, targetEnemy, damage, isMagic) {
   const dx = targetEnemy.x - fromX;
   const dy = targetEnemy.y - fromY;
   const len = Math.hypot(dx, dy) || 1;
-  const dmg = Math.max(1, (damage ?? ARCHER_DAMAGE_DEFAULT) - (targetEnemy.defense ?? 0) * 0.5);
+  const dmg = isMagic
+    ? Math.max(1, (damage ?? 0) - (targetEnemy.magicDefense ?? 0))
+    : Math.max(1, (damage ?? ARCHER_DAMAGE_DEFAULT) - (targetEnemy.defense ?? 0) * 0.5);
   if (!state.arrows) state.arrows = [];
   state.arrows.push({
     x: fromX,
@@ -80,6 +83,7 @@ export function spawnArrowFrom(state, fromX, fromY, targetEnemy, damage) {
     damage: dmg,
     target: targetEnemy,
     age: 0,
+    isMagic: !!isMagic,
   });
 }
 

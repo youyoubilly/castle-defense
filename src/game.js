@@ -15,15 +15,19 @@ import {
   drawEnemies,
   startSpawning,
   trySpawnWaveEnemy,
+  applyBossSummon,
   applySoldierDamage,
   applyEnemyDamageToSoldiers,
   applyEnemyArcherShoot,
   updateEnemyArrows,
   drawEnemyArrows,
+  applyDragonActions,
+  updateDragonAxes,
+  drawDragonAxes,
   getWaveTotal,
   getEnemyTypeName,
 } from './enemies.js';
-import { drawSoldiers, createSoldiers, updateSoldierPositions, updateSoldierReturnAndHeal, applySoldierArcherShoot } from './soldiers.js';
+import { drawSoldiers, createSoldiers, updateSoldierPositions, updateSoldierReturnAndHeal, applySoldierArcherShoot, applySoldierMageShoot } from './soldiers.js';
 import { createArchers, updateArcherPositions, applyArcherShoot, updateArrows, drawArchers, drawArrows } from './archers.js';
 import {
   createArtillery,
@@ -64,6 +68,8 @@ export function createState(canvas) {
     waveState: 'fighting',
     waveEnemiesToSpawn: 10,
     waveEnemiesSpawned: 0,
+    waveBossesToSpawn: 0,
+    waveBossesSpawned: 0,
     castleHealth: 10,
     score: 0,
     gold: 0,
@@ -88,6 +94,7 @@ export function createState(canvas) {
     archers: [],
     arrows: [],
     enemyArrows: [],
+    dragonAxes: [],
     artillery: [],
     cannonballs: [],
     maxArtillery: 2,
@@ -95,6 +102,7 @@ export function createState(canvas) {
     weather: null,
     magic: null,
     selectedUnit: null,
+    castleSpellSupport: false,
   };
   state.soldiers = createSoldiers(state);
   state.archers = createArchers(state);
@@ -118,6 +126,9 @@ export function startNextWave(state) {
   state.waveState = 'fighting';
   state.waveEnemiesToSpawn = getWaveTotal(state.wave);
   state.waveEnemiesSpawned = 0;
+  const isBossWave = (state.wave % 5) === 0;
+  state.waveBossesToSpawn = isBossWave ? 2 : 0;
+  state.waveBossesSpawned = 0;
   state.lastSpawnTime = performance.now();
 }
 
@@ -144,6 +155,8 @@ export function resetState(state) {
   state.waveState = 'fighting';
   state.waveEnemiesToSpawn = getWaveTotal(1);
   state.waveEnemiesSpawned = 0;
+  state.waveBossesToSpawn = 0;
+  state.waveBossesSpawned = 0;
   state.lastSpawnTime = performance.now();
   state.score = 0;
   state.gold = 0;
@@ -154,12 +167,14 @@ export function resetState(state) {
   state.artillery = [];
   state.cannonballs = [];
   state.enemyArrows = [];
+  state.dragonAxes = [];
   state.bloodParticles = [];
   state.selectedUnit = null;
   state.soldierAttackBonus = 0;
   state.soldierHpBonus = 0;
   state.soldierDefenseBonus = 0;
   state.frameCount = 0;
+  state.castleSpellSupport = false;
   syncCastleTowerHeight(state);
   const m = state.magic;
   if (m) {
@@ -199,6 +214,7 @@ export function gameLoop(ctx, canvas, state) {
   state.frameCount = (state.frameCount || 0) + 1;
 
   trySpawnWaveEnemy(state, w, h);
+  applyBossSummon(state);
   if (
     state.waveState === 'fighting' &&
     (state.waveEnemiesSpawned ?? 0) >= (state.waveEnemiesToSpawn ?? 0) &&
@@ -220,9 +236,12 @@ export function gameLoop(ctx, canvas, state) {
   drawLines(ctx, state);
   updateEnemies(state, w, h);
   applyEnemyArcherShoot(state);
+  applyDragonActions(state);
   updateEnemyArrows(state);
+  updateDragonAxes(state);
   applyArcherShoot(state);
   applySoldierArcherShoot(state);
+  applySoldierMageShoot(state);
   applyArtilleryShoot(state);
   updateArrows(state);
   updateCannonballs(state);
@@ -236,6 +255,7 @@ export function gameLoop(ctx, canvas, state) {
   drawEnemies(ctx, state);
   drawArrows(ctx, state);
   drawEnemyArrows(ctx, state);
+  drawDragonAxes(ctx, state);
   drawCannonballs(ctx, state);
   drawBloodParticles(ctx, state);
   drawWeather(ctx, state);
@@ -282,12 +302,13 @@ function drawUnitPanel(ctx, state) {
 
   const w = state.width || 800;
   const panelW = 160;
-  const panelH = 88;
   const pad = 12;
+  const isSoldier = sel.type === 'soldier';
+  const extraLine = isSoldier ? (sel.unit.magicAttack ?? 0) > 0 : (sel.unit.magicDefense ?? 0) > 0;
+  const panelH = 88 + (extraLine ? 18 : 0);
   const x = w - panelW - 20;
   const y = 100;
 
-  const isSoldier = sel.type === 'soldier';
   if (isSoldier) {
     ctx.fillStyle = 'rgba(22,38,58,0.92)';
     ctx.strokeStyle = 'rgba(70,130,200,0.95)';
@@ -322,6 +343,10 @@ function drawUnitPanel(ctx, state) {
     ctx.fillText('战斗力: ' + (s.attack ?? state.soldierDamage ?? 20), x + pad, lineY);
     lineY += lineH;
     ctx.fillText('防御力: ' + (s.defense ?? state.soldierDefense ?? 5), x + pad, lineY);
+    if ((s.magicAttack ?? 0) > 0) {
+      lineY += lineH;
+      ctx.fillText('魔法攻击: ' + s.magicAttack, x + pad, lineY);
+    }
   } else {
     const e = sel.unit;
     ctx.fillText('血量: ' + Math.max(0, e.hp) + ' / ' + (e.maxHp ?? 60), x + pad, lineY);
@@ -329,6 +354,10 @@ function drawUnitPanel(ctx, state) {
     ctx.fillText('战斗力: ' + (e.attack ?? 10), x + pad, lineY);
     lineY += lineH;
     ctx.fillText('防御力: ' + (e.defense ?? 10), x + pad, lineY);
+    if ((e.magicDefense ?? 0) > 0) {
+      lineY += lineH;
+      ctx.fillText('魔法防御: ' + e.magicDefense, x + pad, lineY);
+    }
   }
 }
 
