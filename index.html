@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>城堡防守</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <button type="button" id="shop-btn" title="商店">商店</button>
+    <div id="magic-bar">
+      <button type="button" id="magic-fire-rain" data-skill="fire_rain" title="快捷键 1，选择后点击战场施放">火雨</button>
+      <button type="button" id="magic-fire-arrow" data-skill="fire_arrow" title="快捷键 2，选择后点击战场施放">火箭</button>
+      <button type="button" id="magic-freeze" data-skill="freeze" title="快捷键 3，选择后点击战场施放">冻结</button>
+      <button type="button" id="magic-fire-sea" data-skill="fire_sea" title="快捷键 4，选择后点击战场施放">火海</button>
+      <button type="button" id="magic-missile" data-skill="missile" title="快捷键 5，从城堡发射，点击落点">导弹</button>
+    </div>
+    <div id="shop-overlay" class="shop-hidden">
+      <div id="shop-panel">
+        <h2>商店</h2>
+        <p class="shop-gold-row">金币: <span id="shop-gold">0</span></p>
+        <ul class="shop-list">
+          <li><button type="button" data-action="castle" data-cost="50">升级城堡 (50 金币)</button></li>
+          <li><button type="button" data-action="life" data-cost="40">恢复1点城堡血量 (40 金币)</button></li>
+          <li><button type="button" data-action="soldier" data-cost="60">增加士兵 (60 金币)</button></li>
+        </ul>
+        <button type="button" id="shop-close">关闭</button>
+      </div>
+    </div>
+    <div id="game-over-overlay" class="game-over-hidden">
+      <div id="game-over-panel">
+        <h2>游戏结束</h2>
+        <p class="game-over-score">得分: <span id="game-over-score">0</span></p>
+        <p class="game-over-gold">金币: <span id="game-over-gold">0</span></p>
+        <div class="game-over-buttons">
+          <button type="button" id="game-over-restart">重新开始</button>
+          <button type="button" id="game-over-continue" title="花费 300 金币恢复 5 点城堡血量并继续">300 金币继续游戏</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

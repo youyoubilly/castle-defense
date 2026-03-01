@@ -1,0 +1,237 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+#shop-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 8px 16px;
+  font-size: 16px;
+  background: #5a4a3a;
+  color: #e8c830;
+  border: 1px solid #8a7a5a;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#shop-btn:hover {
+  background: #6a5a4a;
+}
+
+#shop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#shop-overlay.shop-hidden {
+  display: none;
+}
+
+#shop-panel {
+  background: #3a352a;
+  color: #e0d8c8;
+  padding: 24px;
+  border-radius: 12px;
+  min-width: 280px;
+  border: 2px solid #5a5040;
+}
+#shop-panel h2 {
+  margin-bottom: 12px;
+  font-size: 20px;
+}
+.shop-gold-row {
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+.shop-gold-row span {
+  color: #e8c830;
+  font-weight: bold;
+}
+.shop-list {
+  list-style: none;
+  margin-bottom: 16px;
+}
+.shop-list li {
+  margin-bottom: 8px;
+}
+.shop-list button {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  background: #4a453a;
+  color: #e8d8b0;
+  border: 1px solid #6a6050;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.shop-list button:hover:not(:disabled) {
+  background: #5a5548;
+}
+.shop-list button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+#shop-close {
+  width: 100%;
+  padding: 8px;
+  font-size: 14px;
+  background: #4a4035;
+  color: #c0b8a8;
+  border: 1px solid #5a5040;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#shop-close:hover {
+  background: #5a5045;
+}
+
+#magic-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+}
+#magic-bar button {
+  padding: 10px 18px;
+  font-size: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  min-width: 80px;
+  position: relative;
+}
+#magic-bar button.selected {
+  border-color: #ffcc00;
+  box-shadow: 0 0 10px rgba(255,204,0,0.5);
+}
+#magic-bar button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+#magic-fire-rain {
+  background: linear-gradient(#8b4510, #5a2a08);
+  color: #ffcc80;
+}
+#magic-fire-rain:hover:not(:disabled) {
+  background: linear-gradient(#a05520, #6a3a18);
+}
+#magic-fire-arrow {
+  background: linear-gradient(#6a3a1a, #4a2010);
+  color: #ffaa50;
+}
+#magic-fire-arrow:hover:not(:disabled) {
+  background: linear-gradient(#8a4a2a, #5a3020);
+}
+#magic-freeze {
+  background: linear-gradient(#2a4a6a, #1a3050);
+  color: #a0d0ff;
+}
+#magic-freeze:hover:not(:disabled) {
+  background: linear-gradient(#3a5a8a, #2a4060);
+}
+#magic-fire-sea {
+  background: linear-gradient(#6a3010, #4a1808);
+  color: #ffbb70;
+}
+#magic-fire-sea:hover:not(:disabled) {
+  background: linear-gradient(#8a4020, #5a2810);
+}
+#magic-missile {
+  background: linear-gradient(#4a4a5a, #2a2a38);
+  color: #b0b8c8;
+}
+#magic-missile:hover:not(:disabled) {
+  background: linear-gradient(#5a5a6a, #3a3a48);
+}
+
+#game-over-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#game-over-overlay.game-over-hidden {
+  display: none;
+}
+
+#game-over-panel {
+  background: #2a2520;
+  color: #e0d8c8;
+  padding: 28px;
+  border-radius: 12px;
+  min-width: 300px;
+  border: 2px solid #5a5040;
+  text-align: center;
+}
+#game-over-panel h2 {
+  margin-bottom: 16px;
+  font-size: 24px;
+  color: #e8a030;
+}
+.game-over-score, .game-over-gold {
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+.game-over-gold span {
+  color: #e8c830;
+  font-weight: bold;
+}
+.game-over-buttons {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.game-over-buttons button {
+  padding: 12px 20px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+#game-over-restart {
+  background: linear-gradient(#3a6a3a, #2a4a2a);
+  color: #c8e8c8;
+  border-color: #4a8a4a;
+}
+#game-over-restart:hover {
+  background: linear-gradient(#4a7a4a, #3a5a3a);
+}
+#game-over-continue {
+  background: linear-gradient(#5a4a2a, #3a3020);
+  color: #e8c830;
+  border-color: #8a7a4a;
+}
+#game-over-continue:hover:not(:disabled) {
+  background: linear-gradient(#6a5a3a, #4a4030);
+}
+#game-over-continue:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
