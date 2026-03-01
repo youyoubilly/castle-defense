@@ -100,14 +100,15 @@ export function updateWeather(state) {
   }
 
   if (w.current === WEATHER_IDS.HAIL) {
-    for (let i = 0; i < 5; i++) {
+    // 冰雹稀疏、下落较慢：每帧最多 1 颗，速度约 5～9
+    if (Math.random() < 0.5) {
       w.particles.push({
         type: 'hail',
         x: Math.random() * (width + 40) - 20,
         y: -10 - Math.random() * 40,
         r: 2 + Math.random() * 2,
-        vy: 18 + Math.random() * 10,
-        vx: (Math.random() - 0.5) * 3,
+        vy: 5 + Math.random() * 4,
+        vx: (Math.random() - 0.5) * 1.5,
       });
     }
   }

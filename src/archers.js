@@ -4,29 +4,46 @@
 
 import { spawnBloodParticles } from './blood.js';
 
-const ARCHER_COUNT = 2;
-const TOWER_H = 70;
 const ARCHER_Y_OFFSET = 18;
 const ARCHER_X_OFFSET = 18;
-const ARCHER_RANGE = 220;
-const ARCHER_DAMAGE = 14;
-const ARCHER_ATTACK_INTERVAL = 35;
 const ARROW_SPEED = 6;
 const ARROW_HIT_RADIUS = 14;
 const ARROW_MAX_AGE = 90;
+const ARCHER_RANGE_DEFAULT = 220;
+const ARCHER_DAMAGE_DEFAULT = 14;
+const ARCHER_ATTACK_INTERVAL_DEFAULT = 35;
+
+/** 城堡等级 → 弓箭手数量（1级无弓箭手，2～5级递增） */
+function getArcherCountForLevel(level) {
+  const L = Math.max(1, Math.min(5, level || 1));
+  return [0, 0, 1, 2, 3, 4][L];
+}
+
+/** 弓箭手属性随城堡等级提升 */
+function getArcherStatsForLevel(level) {
+  const L = Math.max(2, Math.min(5, level || 1));
+  const range = 180 + (L - 1) * 22;
+  const damage = 10 + (L - 1) * 3;
+  const interval = Math.max(28, 42 - (L - 1) * 3);
+  return { range, damage, interval };
+}
 
 export function createArchers(state) {
+  const level = state.castleLevel ?? 1;
+  const count = getArcherCountForLevel(level);
   const cx = state.castleCx;
   const cy = state.castleCy;
+  const towerH = state.castleTowerH ?? 70;
+  const stats = getArcherStatsForLevel(level);
   const archers = [];
-  for (let i = 0; i < ARCHER_COUNT; i++) {
-    const sign = i === 0 ? -1 : 1;
+  for (let i = 0; i < count; i++) {
+    const xOff = count === 1 ? 0 : (i - (count - 1) / 2) * ARCHER_X_OFFSET;
     archers.push({
-      x: cx + sign * ARCHER_X_OFFSET,
-      y: cy - TOWER_H + ARCHER_Y_OFFSET,
-      range: state.archerRange ?? ARCHER_RANGE,
-      damage: state.archerDamage ?? ARCHER_DAMAGE,
-      attackInterval: state.archerAttackInterval ?? ARCHER_ATTACK_INTERVAL,
+      x: cx + xOff,
+      y: cy - towerH + ARCHER_Y_OFFSET,
+      range: stats.range,
+      damage: stats.damage,
+      attackInterval: stats.interval,
       lastAttackFrame: -i * 15,
     });
   }
@@ -37,31 +54,38 @@ export function updateArcherPositions(state) {
   if (!state.archers || state.archers.length === 0) return;
   const cx = state.castleCx;
   const cy = state.castleCy;
+  const towerH = state.castleTowerH ?? 70;
+  const count = state.archers.length;
   state.archers.forEach((a, i) => {
-    const sign = i === 0 ? -1 : 1;
-    a.x = cx + sign * ARCHER_X_OFFSET;
-    a.y = cy - TOWER_H + ARCHER_Y_OFFSET;
+    const xOff = count === 1 ? 0 : (i - (count - 1) / 2) * ARCHER_X_OFFSET;
+    a.x = cx + xOff;
+    a.y = cy - towerH + ARCHER_Y_OFFSET;
   });
 }
 
 /**
- * Spawn an arrow from archer toward target enemy. Damage applied when arrow hits (in updateArrows).
+ * Spawn an arrow from (fromX, fromY) toward target enemy. Used by castle archers and soldier archers.
  */
-function shootArrow(state, archer, targetEnemy) {
-  const dx = targetEnemy.x - archer.x;
-  const dy = targetEnemy.y - archer.y;
+export function spawnArrowFrom(state, fromX, fromY, targetEnemy, damage) {
+  const dx = targetEnemy.x - fromX;
+  const dy = targetEnemy.y - fromY;
   const len = Math.hypot(dx, dy) || 1;
-  const damage = Math.max(1, (archer.damage ?? ARCHER_DAMAGE) - (targetEnemy.defense ?? 0) * 0.5);
+  const dmg = Math.max(1, (damage ?? ARCHER_DAMAGE_DEFAULT) - (targetEnemy.defense ?? 0) * 0.5);
   if (!state.arrows) state.arrows = [];
   state.arrows.push({
-    x: archer.x,
-    y: archer.y,
+    x: fromX,
+    y: fromY,
     vx: (dx / len) * ARROW_SPEED,
     vy: (dy / len) * ARROW_SPEED,
-    damage,
+    damage: dmg,
     target: targetEnemy,
     age: 0,
   });
+}
+
+function shootArrow(state, archer, targetEnemy) {
+  const damage = Math.max(1, (archer.damage ?? ARCHER_DAMAGE_DEFAULT) - (targetEnemy.defense ?? 0) * 0.5);
+  spawnArrowFrom(state, archer.x, archer.y, targetEnemy, damage);
 }
 
 /**
@@ -72,9 +96,9 @@ export function applyArcherShoot(state) {
   const frame = state.frameCount || 0;
 
   state.archers.forEach((archer) => {
-    if ((frame - archer.lastAttackFrame) < (archer.attackInterval ?? ARCHER_ATTACK_INTERVAL)) return;
+    if ((frame - archer.lastAttackFrame) < (archer.attackInterval ?? ARCHER_ATTACK_INTERVAL_DEFAULT)) return;
 
-    const range = archer.range ?? ARCHER_RANGE;
+    const range = archer.range ?? ARCHER_RANGE_DEFAULT;
     let nearest = null;
     let nearestDist = range;
 

@@ -17,13 +17,25 @@ html, body {
   cursor: crosshair;
 }
 
-#shop-btn {
+#top-bar {
   position: fixed;
-  top: 12px;
-  right: 12px;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 10;
-  padding: 8px 16px;
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: linear-gradient(rgba(20, 25, 35, 0.92), rgba(25, 30, 42, 0.88));
+  border-bottom: 1px solid rgba(80, 90, 110, 0.5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#shop-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 14px;
   background: #5a4a3a;
   color: #e8c830;
   border: 1px solid #8a7a5a;
@@ -53,11 +65,60 @@ html, body {
   padding: 24px;
   border-radius: 12px;
   min-width: 280px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
   border: 2px solid #5a5040;
+  position: relative;
+}
+.shop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.shop-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.shop-hint {
+  font-size: 12px;
+  color: #8a8278;
+  margin: -4px 0 8px 0;
+}
+.shop-close-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 14px;
+  background: linear-gradient(#4a6a3a, #3a5028);
+  color: #d0e8c0;
+  border: 1px solid #5a7a4a;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.shop-close-btn:hover {
+  background: linear-gradient(#5a7a4a, #4a6038);
 }
 #shop-panel h2 {
-  margin-bottom: 12px;
+  margin-bottom: 0;
   font-size: 20px;
+}
+.shop-close-bottom {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: bold;
+  background: linear-gradient(#4a6a3a, #3a5028);
+  color: #d0e8c0;
+  border: 2px solid #5a7a4a;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.shop-close-bottom:hover {
+  background: linear-gradient(#5a7a4a, #4a6038);
 }
 .shop-gold-row {
   margin-bottom: 16px;
@@ -72,6 +133,13 @@ html, body {
   margin-bottom: 16px;
 }
 .shop-list li {
+  margin-bottom: 8px;
+}
+.shop-list li.shop-section {
+  padding: 8px 0 4px;
+  font-size: 13px;
+  color: #a09888;
+  border-bottom: 1px solid #4a453a;
   margin-bottom: 8px;
 }
 .shop-list button {
@@ -91,44 +159,146 @@ html, body {
   opacity: 0.6;
   cursor: not-allowed;
 }
-#shop-close {
+
+#soldier-upgrade-panel {
+  position: fixed;
+  left: 20px;
+  bottom: 100px;
+  z-index: 15;
+  background: rgba(30, 40, 55, 0.95);
+  color: #c8d8e8;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 2px solid #4a6a8a;
+  min-width: 180px;
+}
+#soldier-upgrade-panel.soldier-upgrade-hidden {
+  display: none;
+}
+.soldier-upgrade-title {
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: #a0c0e0;
+}
+#soldier-upgrade-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#soldier-upgrade-buttons button {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #3a5068;
+  color: #e0e8f0;
+  border: 1px solid #5a7a9a;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+#soldier-upgrade-buttons button:hover:not(:disabled) {
+  background: #4a6080;
+}
+#soldier-upgrade-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#castle-panel {
+  position: fixed;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+  background: rgba(40, 45, 55, 0.96);
+  color: #d0d8e0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 2px solid #5a6575;
+  min-width: 220px;
+}
+#castle-panel.castle-panel-hidden {
+  display: none;
+}
+.castle-panel-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #e8c830;
+}
+.castle-panel-info {
+  font-size: 14px;
+  margin-bottom: 14px;
+  color: #b0c0d0;
+}
+#castle-panel-gold {
+  color: #e8c830;
+  font-weight: bold;
+}
+#castle-panel-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+#castle-panel-buttons button {
+  padding: 10px 14px;
+  font-size: 14px;
+  background: #3a4555;
+  color: #d0e0e8;
+  border: 1px solid #4a5a6a;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+#castle-panel-buttons button:hover:not(:disabled) {
+  background: #4a5568;
+}
+#castle-panel-buttons button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.castle-panel-close {
   width: 100%;
   padding: 8px;
   font-size: 14px;
-  background: #4a4035;
-  color: #c0b8a8;
-  border: 1px solid #5a5040;
-  border-radius: 6px;
+  background: #4a5568;
+  color: #c0d0e0;
+  border: 1px solid #5a6575;
+  border-radius: 8px;
   cursor: pointer;
 }
-#shop-close:hover {
-  background: #5a5045;
+.castle-panel-close:hover {
+  background: #5a6578;
 }
 
 #magic-bar {
-  position: fixed;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
   display: flex;
-  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.magic-bar-label {
+  font-size: 12px;
+  color: #8a9aaa;
+  margin-right: 4px;
+  flex-shrink: 0;
 }
 #magic-bar button {
-  padding: 10px 18px;
-  font-size: 15px;
-  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 6px;
   cursor: pointer;
-  border: 2px solid transparent;
-  min-width: 80px;
+  border: 1px solid transparent;
+  min-width: 52px;
   position: relative;
 }
 #magic-bar button.selected {
   border-color: #ffcc00;
-  box-shadow: 0 0 10px rgba(255,204,0,0.5);
+  box-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
 }
 #magic-bar button:disabled {
-  opacity: 0.7;
+  opacity: 0.65;
   cursor: not-allowed;
 }
 #magic-fire-rain {
@@ -165,6 +335,34 @@ html, body {
 }
 #magic-missile:hover:not(:disabled) {
   background: linear-gradient(#5a5a6a, #3a3a48);
+}
+#magic-ice-arrow {
+  background: linear-gradient(#2a5a6a, #1a3a50);
+  color: #a0e0ff;
+}
+#magic-ice-arrow:hover:not(:disabled) {
+  background: linear-gradient(#3a6a7a, #2a4a60);
+}
+#magic-frost-ring {
+  background: linear-gradient(#2a4a6a, #1a3050);
+  color: #b0d8ff;
+}
+#magic-frost-ring:hover:not(:disabled) {
+  background: linear-gradient(#3a5a7a, #2a4060);
+}
+#magic-ballista {
+  background: linear-gradient(#4a4a4a, #2a2a32);
+  color: #c0c8d0;
+}
+#magic-ballista:hover:not(:disabled) {
+  background: linear-gradient(#5a5a5a, #3a3a42);
+}
+#magic-volley {
+  background: linear-gradient(#5a5248, #3a3228);
+  color: #d0c8b8;
+}
+#magic-volley:hover:not(:disabled) {
+  background: linear-gradient(#6a6258, #4a4238);
 }
 
 #game-over-overlay {

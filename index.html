@@ -8,25 +8,61 @@
   </head>
   <body>
     <canvas id="game"></canvas>
-    <button type="button" id="shop-btn" title="商店">商店</button>
-    <div id="magic-bar">
-      <button type="button" id="magic-fire-rain" data-skill="fire_rain" title="快捷键 1，选择后点击战场施放">火雨</button>
-      <button type="button" id="magic-fire-arrow" data-skill="fire_arrow" title="快捷键 2，选择后点击战场施放">火箭</button>
-      <button type="button" id="magic-freeze" data-skill="freeze" title="快捷键 3，选择后点击战场施放">冻结</button>
-      <button type="button" id="magic-fire-sea" data-skill="fire_sea" title="快捷键 4，选择后点击战场施放">火海</button>
-      <button type="button" id="magic-missile" data-skill="missile" title="快捷键 5，从城堡发射，点击落点">导弹</button>
+    <div id="top-bar">
+      <div id="magic-bar">
+        <span class="magic-bar-label">技能</span>
+        <button type="button" id="magic-fire-rain" data-skill="fire_rain" title="火雨 · 1">火雨</button>
+        <button type="button" id="magic-fire-arrow" data-skill="fire_arrow" title="火箭 · 2">火箭</button>
+        <button type="button" id="magic-fire-sea" data-skill="fire_sea" title="火海 · 3">火海</button>
+        <button type="button" id="magic-freeze" data-skill="freeze" title="冻结 · 4">冻结</button>
+        <button type="button" id="magic-ice-arrow" data-skill="ice_arrow" title="冰箭 · 5">冰箭</button>
+        <button type="button" id="magic-frost-ring" data-skill="frost_ring" title="冰环 · 6">冰环</button>
+        <button type="button" id="magic-missile" data-skill="missile" title="导弹 · 7">导弹</button>
+        <button type="button" id="magic-ballista" data-skill="ballista" title="弩炮 · 8">弩炮</button>
+        <button type="button" id="magic-volley" data-skill="volley" title="齐射 · 9">齐射</button>
+      </div>
+      <button type="button" id="shop-btn" title="商店">商店</button>
     </div>
-    <div id="shop-overlay" class="shop-hidden">
+    <div id="shop-overlay" class="shop-hidden" title="点击空白处或按 ESC 关闭">
       <div id="shop-panel">
-        <h2>商店</h2>
+        <header class="shop-header">
+          <h2>商店</h2>
+          <button type="button" id="shop-close" class="shop-close-btn" title="返回游戏">返回游戏</button>
+        </header>
+        <p class="shop-hint">按 ESC 或点击外侧关闭 · 城堡/士兵升级请点击城堡</p>
         <p class="shop-gold-row">金币: <span id="shop-gold">0</span></p>
         <ul class="shop-list">
-          <li><button type="button" data-action="castle" data-cost="50">升级城堡 (50 金币)</button></li>
-          <li><button type="button" data-action="life" data-cost="40">恢复1点城堡血量 (40 金币)</button></li>
-          <li><button type="button" data-action="soldier" data-cost="60">增加士兵 (60 金币)</button></li>
+          <li class="shop-section">技能升级（最高 5 级）</li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="fire_rain">火雨 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="fire_arrow">火箭 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="freeze">冻结 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="fire_sea">火海 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="missile">导弹 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="ice_arrow">冰箭 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="frost_ring">冰环 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="ballista">弩炮 升级</button></li>
+          <li><button type="button" data-action="skill_upgrade" data-skill="volley">齐射 升级</button></li>
         </ul>
-        <button type="button" id="shop-close">关闭</button>
+        <button type="button" id="shop-close-bottom" class="shop-close-bottom" title="返回游戏">返回游戏</button>
       </div>
+    </div>
+    <div id="soldier-upgrade-panel" class="soldier-upgrade-hidden">
+      <p class="soldier-upgrade-title">升级职业（仅卫兵可升级）</p>
+      <div id="soldier-upgrade-buttons"></div>
+    </div>
+    <div id="castle-panel" class="castle-panel-hidden">
+      <p class="castle-panel-title">城堡</p>
+      <p class="castle-panel-info">等级: <span id="castle-panel-level">1</span>  血量: <span id="castle-panel-hp">10</span>/10  金币: <span id="castle-panel-gold">0</span></p>
+      <div id="castle-panel-buttons">
+        <button type="button" data-action="castle" data-cost="50">升级城堡 (50)</button>
+        <button type="button" data-action="life" data-cost="40">恢复1点城堡血量 (40)</button>
+        <button type="button" data-action="soldier" data-cost="60">增加士兵 (60)</button>
+        <button type="button" data-action="artillery" data-cost="1000">增加炮兵 (1000)</button>
+        <button type="button" data-action="soldier_attack" data-cost="100">士兵攻击+3 (100)</button>
+        <button type="button" data-action="soldier_hp" data-cost="80">士兵生命+30 (80)</button>
+        <button type="button" data-action="soldier_defense" data-cost="90">士兵防御+2 (90)</button>
+      </div>
+      <button type="button" id="castle-panel-close" class="castle-panel-close">关闭</button>
     </div>
     <div id="game-over-overlay" class="game-over-hidden">
       <div id="game-over-panel">

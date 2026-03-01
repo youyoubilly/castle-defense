@@ -17,14 +17,33 @@ import {
   trySpawnWaveEnemy,
   applySoldierDamage,
   applyEnemyDamageToSoldiers,
+  applyEnemyArcherShoot,
+  updateEnemyArrows,
+  drawEnemyArrows,
   getWaveTotal,
   getEnemyTypeName,
 } from './enemies.js';
-import { drawSoldiers, createSoldiers, updateSoldierPositions, updateSoldierReturnAndHeal } from './soldiers.js';
+import { drawSoldiers, createSoldiers, updateSoldierPositions, updateSoldierReturnAndHeal, applySoldierArcherShoot } from './soldiers.js';
 import { createArchers, updateArcherPositions, applyArcherShoot, updateArrows, drawArchers, drawArrows } from './archers.js';
+import {
+  createArtillery,
+  updateArtilleryPositions,
+  applyArtilleryShoot,
+  updateCannonballs,
+  drawArtillery,
+  drawCannonballs,
+} from './artillery.js';
 import { updateBloodParticles, drawBloodParticles } from './blood.js';
 import { initWeather, updateWeather, drawWeather, getWeatherName } from './weather.js';
-import { initMagic, updateMagic, drawMagic } from './magic.js';
+import { initMagic, updateMagic, drawMagic, SKILL_IDS } from './magic.js';
+
+export const CASTLE_MAX_LEVEL = 5;
+
+/** 城堡等级对应的防御力（敌人冲进城堡时，减少对己方士兵的伤害） */
+export function getCastleDefense(level) {
+  const L = Math.max(1, Math.min(CASTLE_MAX_LEVEL, level || 1));
+  return [0, 0, 2, 4, 6, 8][L];
+}
 
 export function createState(canvas) {
   const w = canvas.width;
@@ -65,9 +84,16 @@ export function createState(canvas) {
     soldierCritMultiplier: 1.8,
     soldierMaxHp: 250,
     soldierDefense: 5,
+    soldierAttackBonus: 0,
+    soldierHpBonus: 0,
+    soldierDefenseBonus: 0,
     soldiers: [],
     archers: [],
     arrows: [],
+    enemyArrows: [],
+    artillery: [],
+    cannonballs: [],
+    maxArtillery: 2,
     bloodParticles: [],
     weather: null,
     magic: null,
@@ -75,10 +101,18 @@ export function createState(canvas) {
   };
   state.soldiers = createSoldiers(state);
   state.archers = createArchers(state);
+  createArtillery(state);
   state.waveEnemiesToSpawn = getWaveTotal(1);
   initWeather(state);
   initMagic(state);
+  syncCastleTowerHeight(state);
   return state;
+}
+
+/** 根据城堡等级更新塔高（弓箭手位置与绘制用） */
+export function syncCastleTowerHeight(state) {
+  const L = Math.max(1, Math.min(CASTLE_MAX_LEVEL, state.castleLevel ?? 1));
+  state.castleTowerH = 68 + (L - 1) * 10;
 }
 
 export function startNextWave(state) {
@@ -120,17 +154,40 @@ export function resetState(state) {
   state.score = 0;
   state.gold = 0;
   state.running = true;
+  state.castleLevel = 1;
   state.soldiers = createSoldiers(state);
   state.archers = createArchers(state);
+  state.artillery = [];
+  state.cannonballs = [];
+  state.enemyArrows = [];
   state.bloodParticles = [];
   state.selectedUnit = null;
+  state.soldierAttackBonus = 0;
+  state.soldierHpBonus = 0;
+  state.soldierDefenseBonus = 0;
   state.frameCount = 0;
+  syncCastleTowerHeight(state);
   const m = state.magic;
   if (m) {
     m.fireRainEffects = [];
     m.fireArrows = [];
     m.fireSeas = [];
     m.missiles = [];
+    m.iceArrows = [];
+    m.frostRings = [];
+    m.ballistaBolts = [];
+    m.volleyArrows = [];
+    m.skillLevels = {
+      [SKILL_IDS.FIRE_RAIN]: 1,
+      [SKILL_IDS.FIRE_ARROW]: 1,
+      [SKILL_IDS.FREEZE]: 1,
+      [SKILL_IDS.FIRE_SEA]: 1,
+      [SKILL_IDS.MISSILE]: 1,
+      [SKILL_IDS.ICE_ARROW]: 1,
+      [SKILL_IDS.FROST_RING]: 1,
+      [SKILL_IDS.BALLISTA]: 1,
+      [SKILL_IDS.VOLLEY]: 1,
+    };
   }
 }
 
@@ -144,6 +201,7 @@ export function gameLoop(ctx, canvas, state) {
   state.castleCx = w / 2;
   state.castleCy = h * 0.75;
   setCastleCenter(state.castleCx, state.castleCy);
+  syncCastleTowerHeight(state);
   state.frameCount = (state.frameCount || 0) + 1;
 
   trySpawnWaveEnemy(state, w, h);
@@ -157,28 +215,34 @@ export function gameLoop(ctx, canvas, state) {
 
   updateSoldierPositions(state);
   updateArcherPositions(state);
+  updateArtilleryPositions(state);
 
   clear(ctx, w, h);
   drawBackground(ctx, w, h, state);
   drawCastle(ctx, state.castleLevel ?? 1);
   drawArchers(ctx, state);
+  drawArtillery(ctx, state);
   drawSoldiers(ctx, state);
   drawLines(ctx, state);
   updateEnemies(state, w, h);
+  applyEnemyArcherShoot(state);
+  updateEnemyArrows(state);
   applyArcherShoot(state);
+  applySoldierArcherShoot(state);
+  applyArtilleryShoot(state);
   updateArrows(state);
+  updateCannonballs(state);
   applySoldierDamage(state);
   applyEnemyDamageToSoldiers(state);
-  if (state.score >= (state.nextCastleUpgradeAt || 10) && state.castleLevel < 3) {
-    state.castleLevel++;
-    state.nextCastleUpgradeAt = state.score + 10;
-  }
+  // 城堡升级仅通过商店购买，不再按得分自动升级
   updateSoldierReturnAndHeal(state);
   updateBloodParticles(state);
   updateWeather(state);
   updateMagic(state);
   drawEnemies(ctx, state);
   drawArrows(ctx, state);
+  drawEnemyArrows(ctx, state);
+  drawCannonballs(ctx, state);
   drawBloodParticles(ctx, state);
   drawWeather(ctx, state);
   drawMagic(ctx, state);
@@ -200,7 +264,7 @@ function drawHUD(ctx, state) {
   ctx.font = '18px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('得分: ' + (state.score || 0), 16, 28);
-  ctx.fillText('城堡血量: ' + Math.max(0, state.castleHealth ?? 10), 16, 52);
+  ctx.fillText('城堡血量: ' + Math.max(0, state.castleHealth ?? 10) + '  Lv.' + (state.castleLevel ?? 1), 16, 52);
   ctx.fillStyle = '#e8c830';
   ctx.fillText('金币: ' + (state.gold ?? 0), 16, 76);
   ctx.font = '14px sans-serif';
@@ -216,6 +280,7 @@ function drawHUD(ctx, state) {
 function drawUnitPanel(ctx, state) {
   const sel = state.selectedUnit;
   if (!sel) return;
+  if (sel.type === 'castle') return;
   if (sel.type === 'enemy' && !sel.unit.alive) {
     state.selectedUnit = null;
     return;
@@ -260,9 +325,9 @@ function drawUnitPanel(ctx, state) {
     const s = sel.unit;
     ctx.fillText('血量: ' + Math.max(0, s.hp) + ' / ' + (s.maxHp ?? 250), x + pad, lineY);
     lineY += lineH;
-    ctx.fillText('战斗力: ' + (state.soldierDamage ?? 20), x + pad, lineY);
+    ctx.fillText('战斗力: ' + (s.attack ?? state.soldierDamage ?? 20), x + pad, lineY);
     lineY += lineH;
-    ctx.fillText('防御力: ' + (state.soldierDefense ?? 5), x + pad, lineY);
+    ctx.fillText('防御力: ' + (s.defense ?? state.soldierDefense ?? 5), x + pad, lineY);
   } else {
     const e = sel.unit;
     ctx.fillText('血量: ' + Math.max(0, e.hp) + ' / ' + (e.maxHp ?? 60), x + pad, lineY);

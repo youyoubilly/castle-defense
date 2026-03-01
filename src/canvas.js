@@ -308,41 +308,39 @@ function drawMapDetails(ctx, width, height, farY, state) {
   });
 }
 
+/** 城堡等级对应塔高（与 game.js syncCastleTowerHeight 一致） */
+function getTowerH(level) {
+  const L = Math.max(1, Math.min(5, level || 1));
+  return 68 + (L - 1) * 10;
+}
+
 /**
- * Draw the castle at (CASTLE_CX, CASTLE_CY). level 1 = improved simple, level 2+ = upgraded.
+ * Draw the castle at (CASTLE_CX, CASTLE_CY). Levels 1–5 each have a distinct appearance.
  */
 export function drawCastle(ctx, level = 1) {
+  const L = Math.max(1, Math.min(5, level || 1));
   const cx = CASTLE_CX;
   const cy = CASTLE_CY;
-  const towerW = level >= 2 ? 40 : 36;
-  const towerH = level >= 2 ? CASTLE_TOWER_H + 15 : CASTLE_TOWER_H;
+  const towerH = getTowerH(L);
+  const towerW = 34 + L * 2;
 
-  if (level >= 2) {
-    drawCastleBase(ctx, cx, cy, true);
-  } else {
+  if (L === 1) {
     drawCastleLevel1(ctx, cx, cy, towerW, towerH);
     return;
   }
-
-  ctx.fillStyle = '#5a6a6a';
-  ctx.fillRect(cx - towerW / 2, cy - towerH, towerW, towerH);
-  ctx.strokeRect(cx - towerW / 2, cy - towerH, towerW, towerH);
-
-  ctx.fillStyle = '#4a4a4a';
-  for (let i = 0; i < 4; i++) {
-    const bx = cx - towerW / 2 + 4 + i * 10;
-    ctx.fillRect(bx, cy - towerH, 6, 6);
-    ctx.fillRect(bx, cy - towerH + 20, 6, 6);
+  if (L === 2) {
+    drawCastleLevel2(ctx, cx, cy, towerW, towerH);
+    return;
   }
-
-  drawCastleRoof(ctx, cx, cy, towerW, towerH);
-  drawCastleFlag(ctx, cx, cy, towerH);
-
-  ctx.fillStyle = '#5a5a5a';
-  ctx.fillRect(cx - towerW / 2 - 18, cy - towerH + 15, 14, 35);
-  ctx.strokeRect(cx - towerW / 2 - 18, cy - towerH + 15, 14, 35);
-  ctx.fillRect(cx + towerW / 2 + 4, cy - towerH + 15, 14, 35);
-  ctx.strokeRect(cx + towerW / 2 + 4, cy - towerH + 15, 14, 35);
+  if (L === 3) {
+    drawCastleLevel3(ctx, cx, cy, towerW, towerH);
+    return;
+  }
+  if (L === 4) {
+    drawCastleLevel4(ctx, cx, cy, towerW, towerH);
+    return;
+  }
+  drawCastleLevel5(ctx, cx, cy, towerW, towerH);
 }
 
 function drawCastleBase(ctx, cx, cy, extraRing) {
@@ -386,18 +384,20 @@ function drawCastleRoof(ctx, cx, cy, towerW, towerH) {
   ctx.stroke();
 }
 
-function drawCastleFlag(ctx, cx, cy, towerH) {
+function drawCastleFlag(ctx, cx, cy, towerH, big) {
+  const poleTop = cy - towerH - (big ? 28 : 22);
   ctx.strokeStyle = '#3a3028';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = big ? 2.5 : 2;
   ctx.beginPath();
-  ctx.moveTo(cx, cy - towerH - 22);
-  ctx.lineTo(cx, cy - towerH - 8);
+  ctx.moveTo(cx, poleTop + (big ? 18 : 14));
+  ctx.lineTo(cx, cy - towerH - (big ? 12 : 8));
   ctx.stroke();
   ctx.fillStyle = '#8b0000';
   ctx.beginPath();
-  ctx.moveTo(cx, cy - towerH - 18);
-  ctx.lineTo(cx + 10, cy - towerH - 14);
-  ctx.lineTo(cx, cy - towerH - 10);
+  const fw = big ? 14 : 10;
+  ctx.moveTo(cx, cy - towerH - (big ? 22 : 18));
+  ctx.lineTo(cx + fw, cy - towerH - (big ? 18 : 14));
+  ctx.lineTo(cx, cy - towerH - (big ? 14 : 10));
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = '#6a0000';
@@ -481,4 +481,128 @@ function drawCastleLevel1(ctx, cx, cy, towerW, towerH) {
 
   // Flag pole + flag
   drawCastleFlag(ctx, cx, cy, towerH);
+}
+
+/** 2 级：有底座环与主塔，两侧各一小翼（可站 1 弓箭手） */
+function drawCastleLevel2(ctx, cx, cy, towerW, towerH) {
+  drawCastleBase(ctx, cx, cy, true);
+  drawMainTower(ctx, cx, cy, towerW, towerH, 1);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH);
+  drawCastleFlag(ctx, cx, cy, towerH);
+  const wingW = 12;
+  const wingH = 28;
+  ctx.fillStyle = '#525a5a';
+  ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 20, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 2, cy - towerH + 20, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 2, cy - towerH + 20, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 2, cy - towerH + 20, wingW, wingH);
+}
+
+/** 3 级：主塔更高，两窗，两侧翼稍大 */
+function drawCastleLevel3(ctx, cx, cy, towerW, towerH) {
+  drawCastleBase(ctx, cx, cy, true);
+  drawMainTower(ctx, cx, cy, towerW, towerH, 2);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH);
+  drawCastleFlag(ctx, cx, cy, towerH);
+  const wingW = 14;
+  const wingH = 38;
+  ctx.fillStyle = '#5a6262';
+  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 12, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 4, cy - towerH + 12, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 4, cy - towerH + 12, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 4, cy - towerH + 12, wingW, wingH);
+  ctx.fillStyle = '#3a4048';
+  ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 22, 6, 8);
+  ctx.fillRect(cx + towerW / 2 + 8, cy - towerH + 22, 6, 8);
+}
+
+/** 4 级：主塔更多砖纹与窗，两侧翼带垛口 */
+function drawCastleLevel4(ctx, cx, cy, towerW, towerH) {
+  drawCastleBase(ctx, cx, cy, true);
+  drawMainTower(ctx, cx, cy, towerW, towerH, 3);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH);
+  drawCastleFlag(ctx, cx, cy, towerH);
+  const wingW = 18;
+  const wingH = 48;
+  ctx.fillStyle = '#5c6464';
+  ctx.fillRect(cx - towerW / 2 - wingW - 6, cy - towerH + 8, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 6, cy - towerH + 8, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 6, cy - towerH + 8, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 6, cy - towerH + 8, wingW, wingH);
+  for (let k = 0; k < 2; k++) {
+    const sx = k === 0 ? cx - towerW / 2 - wingW - 6 : cx + towerW / 2 + 6;
+    ctx.fillStyle = '#4a5050';
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(sx + 2 + i * 4, cy - towerH + 6, 2, 4);
+    }
+  }
+  ctx.fillStyle = '#3a4048';
+  ctx.fillRect(cx - towerW / 2 - wingW - 2, cy - towerH + 20, 8, 10);
+  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 20, 8, 10);
+}
+
+/** 5 级：完整要塞，主塔与双翼带垛口，旗更大 */
+function drawCastleLevel5(ctx, cx, cy, towerW, towerH) {
+  drawCastleBase(ctx, cx, cy, true);
+  ctx.fillStyle = '#363a3a';
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 4, CASTLE_BASE_RX - 8, CASTLE_BASE_RY - 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  drawMainTower(ctx, cx, cy, towerW, towerH, 4);
+  drawCastleRoof(ctx, cx, cy, towerW, towerH);
+  drawCastleFlag(ctx, cx, cy, towerH, true);
+  const wingW = 22;
+  const wingH = 58;
+  ctx.fillStyle = '#5e6666';
+  ctx.fillRect(cx - towerW / 2 - wingW - 8, cy - towerH + 4, wingW, wingH);
+  ctx.strokeRect(cx - towerW / 2 - wingW - 8, cy - towerH + 4, wingW, wingH);
+  ctx.fillRect(cx + towerW / 2 + 8, cy - towerH + 4, wingW, wingH);
+  ctx.strokeRect(cx + towerW / 2 + 8, cy - towerH + 4, wingW, wingH);
+  for (let k = 0; k < 2; k++) {
+    const sx = k === 0 ? cx - towerW / 2 - wingW - 8 : cx + towerW / 2 + 8;
+    ctx.fillStyle = '#4a5252';
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(sx + 2 + i * 4, cy - towerH + 2, 2, 5);
+    }
+  }
+  ctx.fillStyle = '#3a4048';
+  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 16, 10, 12);
+  ctx.fillRect(cx - towerW / 2 - wingW - 4, cy - towerH + 36, 10, 12);
+  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 16, 10, 12);
+  ctx.fillRect(cx + towerW / 2 + 10, cy - towerH + 36, 10, 12);
+}
+
+/** 主塔：砖纹 + 若干窗户 */
+function drawMainTower(ctx, cx, cy, towerW, towerH, windowCount) {
+  const towerGrad = ctx.createLinearGradient(cx - towerW / 2, 0, cx + towerW / 2, 0);
+  towerGrad.addColorStop(0, '#6a6e6e');
+  towerGrad.addColorStop(0.4, '#5a5e5e');
+  towerGrad.addColorStop(0.6, '#525656');
+  towerGrad.addColorStop(1, '#4a4e4e');
+  ctx.fillStyle = towerGrad;
+  ctx.fillRect(cx - towerW / 2, cy - towerH, towerW, towerH);
+  ctx.strokeStyle = '#3a3a3a';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(cx - towerW / 2, cy - towerH, towerW, towerH);
+  ctx.fillStyle = '#424848';
+  const step = Math.floor(towerW / 10);
+  for (let row = 0; row < Math.floor(towerH / 12); row++) {
+    for (let col = 0; col < 4; col++) {
+      const bx = cx - towerW / 2 + 6 + col * (step + 2);
+      const by = cy - towerH + 6 + row * 12;
+      ctx.fillRect(bx, by, 6, 6);
+    }
+  }
+  const winH = 10;
+  const winW = 8;
+  for (let i = 0; i < windowCount; i++) {
+    const ty = cy - towerH * (0.35 + i * 0.25);
+    ctx.fillStyle = '#2a3038';
+    ctx.fillRect(cx - winW / 2, ty, winW, winH);
+    ctx.strokeRect(cx - winW / 2, ty, winW, winH);
+    ctx.fillStyle = 'rgba(180,200,255,0.35)';
+    ctx.fillRect(cx - winW / 2 + 1, ty + 1, winW - 2, winH - 2);
+  }
 }

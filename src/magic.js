@@ -1,9 +1,11 @@
 /**
  * Player magic skills: fire rain (AOE), fire arrow (projectiles), freeze (AOE).
  * Click skill button to select, then click on canvas to cast. Each skill has cooldown.
+ * Weather affects: some skills enhanced (e.g. freeze in hail), some limited (e.g. missile in hail, fire in rain).
  */
 
 import { spawnBloodParticles } from './blood.js';
+import { WEATHER_IDS } from './weather.js';
 
 export const SKILL_IDS = {
   FIRE_RAIN: 'fire_rain',
@@ -11,7 +13,29 @@ export const SKILL_IDS = {
   FREEZE: 'freeze',
   FIRE_SEA: 'fire_sea',
   MISSILE: 'missile',
+  ICE_ARROW: 'ice_arrow',
+  FROST_RING: 'frost_ring',
+  BALLISTA: 'ballista',
+  VOLLEY: 'volley',
 };
+
+export const SKILL_MAX_LEVEL = 5;
+
+/** 升级到下一级所需金币：Lv1→2=60, 2→3=120, 3→4=200, 4→5=320 */
+export function getSkillUpgradeCost(currentLevel) {
+  const costs = [60, 120, 200, 320];
+  return currentLevel >= SKILL_MAX_LEVEL ? 0 : (costs[currentLevel - 1] ?? 320);
+}
+
+/** 技能等级对应的伤害/范围/持续时间倍数（1级=1.0，5级约 1.35 / 1.2 / 1.25） */
+function getSkillMultiplier(level) {
+  const L = Math.max(1, Math.min(SKILL_MAX_LEVEL, level || 1));
+  return {
+    damage: 1 + (L - 1) * 0.09,
+    radius: 1 + (L - 1) * 0.05,
+    duration: 1 + (L - 1) * 0.06,
+  };
+}
 
 const COOLDOWN_MS = {
   [SKILL_IDS.FIRE_RAIN]: 22000,
@@ -19,6 +43,10 @@ const COOLDOWN_MS = {
   [SKILL_IDS.FREEZE]: 24000,
   [SKILL_IDS.FIRE_SEA]: 26000,
   [SKILL_IDS.MISSILE]: 28000,
+  [SKILL_IDS.ICE_ARROW]: 18000,
+  [SKILL_IDS.FROST_RING]: 20000,
+  [SKILL_IDS.BALLISTA]: 24000,
+  [SKILL_IDS.VOLLEY]: 22000,
 };
 
 const FIRE_RAIN_RADIUS = 88;
@@ -57,6 +85,27 @@ const MISSILE_EXPLOSION_DURATION_MS = 450;
 const MISSILE_ARC_HEIGHT_RATIO = 0.4;
 const MISSILE_BASE_FRAMES = 55;
 const MISSILE_FRAMES_PER_DIST = 0.12;
+
+const ICE_ARROW_SPEED = 13;
+const ICE_ARROW_DAMAGE = 32;
+const ICE_ARROW_SLOW_MS = 1800;
+const ICE_ARROW_HIT_R = 16;
+
+const FROST_RING_RADIUS = 55;
+const FROST_RING_DAMAGE = 22;
+const FROST_RING_FREEZE_MS = 2000;
+const FROST_RING_VISIBLE_MS = 800;
+
+const BALLISTA_SPEED = 18;
+const BALLISTA_DAMAGE = 78;
+const BALLISTA_HIT_R = 20;
+
+const VOLLEY_COUNT = 5;
+const VOLLEY_SPREAD = 0.35;
+const VOLLEY_DAMAGE = 18;
+const VOLLEY_SPEED = 14;
+const VOLLEY_HIT_R = 22;
+const VOLLEY_AOE_R = 28;
 
 /** 点到线段 (x1,y1)-(x2,y2) 的距离 */
 function distanceToSegment(px, py, x1, y1, x2, y2) {
@@ -99,14 +148,119 @@ export function initMagic(state) {
   m.cooldownUntil[SKILL_IDS.FREEZE] = 0;
   m.cooldownUntil[SKILL_IDS.FIRE_SEA] = 0;
   m.cooldownUntil[SKILL_IDS.MISSILE] = 0;
+  m.cooldownUntil[SKILL_IDS.ICE_ARROW] = 0;
+  m.cooldownUntil[SKILL_IDS.FROST_RING] = 0;
+  m.cooldownUntil[SKILL_IDS.BALLISTA] = 0;
+  m.cooldownUntil[SKILL_IDS.VOLLEY] = 0;
+  m.skillLevels = m.skillLevels || {
+    [SKILL_IDS.FIRE_RAIN]: 1,
+    [SKILL_IDS.FIRE_ARROW]: 1,
+    [SKILL_IDS.FREEZE]: 1,
+    [SKILL_IDS.FIRE_SEA]: 1,
+    [SKILL_IDS.MISSILE]: 1,
+    [SKILL_IDS.ICE_ARROW]: 1,
+    [SKILL_IDS.FROST_RING]: 1,
+    [SKILL_IDS.BALLISTA]: 1,
+    [SKILL_IDS.VOLLEY]: 1,
+  };
   m.fireRainEffects = m.fireRainEffects || [];
   m.fireArrows = m.fireArrows || [];
   m.fireSeas = m.fireSeas || [];
   m.missiles = m.missiles || [];
+  m.iceArrows = m.iceArrows || [];
+  m.frostRings = m.frostRings || [];
+  m.ballistaBolts = m.ballistaBolts || [];
+  m.volleyArrows = m.volleyArrows || [];
+}
+
+export function getSkillLevel(state, skillId) {
+  return Math.max(1, Math.min(SKILL_MAX_LEVEL, state.magic?.skillLevels?.[skillId] ?? 1));
+}
+
+export function upgradeSkill(state, skillId) {
+  const m = state.magic;
+  if (!m || !skillId) return false;
+  const cur = getSkillLevel(state, skillId);
+  if (cur >= SKILL_MAX_LEVEL) return false;
+  const cost = getSkillUpgradeCost(cur);
+  if ((state.gold ?? 0) < cost) return false;
+  state.gold -= cost;
+  m.skillLevels[skillId] = (m.skillLevels[skillId] ?? 1) + 1;
+  return true;
 }
 
 function isOnCooldown(state, skillId) {
   return (state.magic?.cooldownUntil?.[skillId] ?? 0) > Date.now();
+}
+
+/** 冷却时间随等级略微缩短：5级约为基础的 80% */
+function getCooldownMs(state, skillId) {
+  const base = COOLDOWN_MS[skillId] ?? 20000;
+  const level = getSkillLevel(state, skillId);
+  const factor = 1 - (level - 1) * 0.05;
+  return Math.max(base * 0.6, Math.floor(base * factor));
+}
+
+const WEATHER_RAIN_LIKE = [WEATHER_IDS.RAIN, WEATHER_IDS.HEAVY_RAIN, WEATHER_IDS.THUNDERSTORM, WEATHER_IDS.STORM];
+
+/**
+ * 天气对技能的影响：能否使用、伤害/范围/持续时间倍数、额外伤害（如冰雹下冻结）
+ * @returns {{ canUse: boolean, damageMult: number, radiusMult: number, durationMult: number, extraDamage: number, reason?: string }}
+ */
+function getWeatherSkillModifiers(state, skillId) {
+  const weather = state.weather?.current ?? WEATHER_IDS.SUNNY;
+  const def = { canUse: true, damageMult: 1, radiusMult: 1, durationMult: 1, extraDamage: 0 };
+
+  if (skillId === SKILL_IDS.MISSILE) {
+    if (weather === WEATHER_IDS.HAIL) {
+      return { ...def, canUse: false, reason: '冰雹天气无法使用导弹' };
+    }
+  }
+
+  if (skillId === SKILL_IDS.FREEZE) {
+    if (weather === WEATHER_IDS.HAIL) {
+      return { ...def, radiusMult: 1.35, extraDamage: 12 };
+    }
+    if (weather === WEATHER_IDS.SNOW) {
+      return { ...def, durationMult: 1.15, radiusMult: 1.08 };
+    }
+  }
+
+  if (skillId === SKILL_IDS.FIRE_RAIN || skillId === SKILL_IDS.FIRE_SEA) {
+    if (WEATHER_RAIN_LIKE.includes(weather)) {
+      return { ...def, damageMult: 0.38 };
+    }
+    if (weather === WEATHER_IDS.SUNNY) {
+      return { ...def, damageMult: 1.12 };
+    }
+  }
+
+  if (skillId === SKILL_IDS.FIRE_ARROW) {
+    if (WEATHER_RAIN_LIKE.includes(weather)) return { ...def, damageMult: 0.75 };
+    if (weather === WEATHER_IDS.SUNNY) return { ...def, damageMult: 1.1 };
+  }
+
+  if (skillId === SKILL_IDS.ICE_ARROW || skillId === SKILL_IDS.FROST_RING) {
+    if (weather === WEATHER_IDS.HAIL) return { ...def, damageMult: 1.25, radiusMult: 1.15 };
+    if (weather === WEATHER_IDS.SNOW) return { ...def, damageMult: 1.12, durationMult: 1.1 };
+  }
+
+  if (skillId === SKILL_IDS.BALLISTA || skillId === SKILL_IDS.VOLLEY) {
+    if (weather === WEATHER_IDS.HAIL) return { ...def, canUse: false, reason: '冰雹天气无法使用机械技能' };
+  }
+
+  return def;
+}
+
+/** 当前天气下该技能是否可用（用于禁用按钮与提示） */
+export function canUseSkillInWeather(state, skillId) {
+  return getWeatherSkillModifiers(state, skillId).canUse;
+}
+
+/** 获取天气导致的不可用原因（如「冰雹天气无法使用导弹」） */
+export function getSkillWeatherReason(state, skillId) {
+  const m = getWeatherSkillModifiers(state, skillId);
+  return m.reason ?? null;
 }
 
 export function tryCastMagic(state, x, y) {
@@ -114,41 +268,67 @@ export function tryCastMagic(state, x, y) {
   if (!m || !m.selectedSkill) return false;
   const skill = m.selectedSkill;
   if (isOnCooldown(state, skill)) return false;
+  const weatherMod = getWeatherSkillModifiers(state, skill);
+  if (!weatherMod.canUse) {
+    m.selectedSkill = null;
+    return false;
+  }
+
   const now = Date.now();
-  m.cooldownUntil[skill] = now + (COOLDOWN_MS[skill] ?? 20000);
+  m.cooldownUntil[skill] = now + getCooldownMs(state, skill);
   m.selectedSkill = null;
 
   if (skill === SKILL_IDS.FIRE_RAIN) {
-    castFireRain(state, x, y);
+    castFireRain(state, x, y, weatherMod);
     return true;
   }
   if (skill === SKILL_IDS.FIRE_ARROW) {
-    castFireArrow(state, x, y);
+    castFireArrow(state, x, y, weatherMod);
     return true;
   }
   if (skill === SKILL_IDS.FREEZE) {
-    castFreeze(state, x, y);
+    castFreeze(state, x, y, weatherMod);
     return true;
   }
   if (skill === SKILL_IDS.FIRE_SEA) {
-    castFireSea(state, x, y);
+    castFireSea(state, x, y, weatherMod);
     return true;
   }
   if (skill === SKILL_IDS.MISSILE) {
-    castMissile(state, x, y);
+    castMissile(state, x, y, weatherMod);
+    return true;
+  }
+  if (skill === SKILL_IDS.ICE_ARROW) {
+    castIceArrow(state, x, y, weatherMod);
+    return true;
+  }
+  if (skill === SKILL_IDS.FROST_RING) {
+    castFrostRing(state, x, y, weatherMod);
+    return true;
+  }
+  if (skill === SKILL_IDS.BALLISTA) {
+    castBallista(state, x, y, weatherMod);
+    return true;
+  }
+  if (skill === SKILL_IDS.VOLLEY) {
+    castVolley(state, x, y, weatherMod);
     return true;
   }
   return false;
 }
 
-function castFireRain(state, x, y) {
+function castFireRain(state, x, y, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.FIRE_RAIN);
+  const mult = getSkillMultiplier(level);
+  const radius = Math.floor(FIRE_RAIN_RADIUS * mult.radius * (weatherMod?.radiusMult ?? 1));
+  const damage = Math.floor(FIRE_RAIN_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+
   const w = state.width || 800;
   const h = state.height || 600;
   const particles = [];
-  // 火雨从天上（画布上方）坠落，落点分布在目标范围内
   for (let i = 0; i < FIRE_RAIN_PARTICLES; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const r = Math.random() * FIRE_RAIN_RADIUS;
+    const r = Math.random() * radius;
     const fallX = x + Math.cos(angle) * r;
     const startY = -FIRE_RAIN_SPAWN_TOP_OFFSET - Math.random() * 80;
     particles.push({
@@ -164,8 +344,8 @@ function castFireRain(state, x, y) {
   state.magic.fireRainEffects.push({
     cx: x,
     cy: y,
-    radius: FIRE_RAIN_RADIUS,
-    damage: FIRE_RAIN_DAMAGE,
+    radius,
+    damage,
     applied: false,
     particles,
     createdAt: state.frameCount || 0,
@@ -176,8 +356,8 @@ function castFireRain(state, x, y) {
   for (const e of enemies) {
     if (!e.alive) continue;
     const dist = Math.hypot(e.x - x, e.y - y);
-    if (dist <= FIRE_RAIN_RADIUS) {
-      const raw = Math.max(1, FIRE_RAIN_DAMAGE - (e.defense ?? 0));
+    if (dist <= radius) {
+      const raw = Math.max(1, damage - (e.defense ?? 0));
       e.hp -= raw;
       e.hitFlashUntil = Date.now() + 400;
       e.lastHitCrit = false;
@@ -194,7 +374,11 @@ function castFireRain(state, x, y) {
   }
 }
 
-function castFireArrow(state, x, y) {
+function castFireArrow(state, x, y, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.FIRE_ARROW);
+  const mult = getSkillMultiplier(level);
+  const damage = Math.floor(FIRE_ARROW_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+
   const enemies = (state.enemies || []).filter((e) => e.alive);
   let aimAngle = Math.PI * 0.5;
   let nearestDist = FIRE_ARROW_AIM_RANGE;
@@ -216,33 +400,64 @@ function castFireArrow(state, x, y) {
       y,
       vx: Math.cos(angle) * FIRE_ARROW_SPEED,
       vy: Math.sin(angle) * FIRE_ARROW_SPEED,
-      damage: FIRE_ARROW_DAMAGE,
+      damage,
       hit: false,
     });
   }
 }
 
-function castFreeze(state, x, y) {
+function castFreeze(state, x, y, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.FREEZE);
+  const mult = getSkillMultiplier(level);
+  const durationMult = (weatherMod?.durationMult ?? 1);
+  const radiusMult = (weatherMod?.radiusMult ?? 1);
+  const durationMs = Math.floor(FREEZE_DURATION_MS * mult.duration * durationMult);
+  const radius = Math.floor(FREEZE_RADIUS * mult.radius * radiusMult);
+  const extraDamage = weatherMod?.extraDamage ?? 0;
+  const until = Date.now() + durationMs;
+
   const enemies = state.enemies || [];
-  const until = Date.now() + FREEZE_DURATION_MS;
   for (const e of enemies) {
     if (!e.alive) continue;
     const dist = Math.hypot(e.x - x, e.y - y);
-    if (dist <= FREEZE_RADIUS) {
+    if (dist <= radius) {
       e.frozenUntil = Math.max(e.frozenUntil || 0, until);
+      if (extraDamage > 0) {
+        e.hp = Math.max(0, (e.hp ?? e.maxHp) - extraDamage);
+        e.hitFlashUntil = Date.now() + 300;
+        spawnBloodParticles(state, e.x, e.y, 3);
+        if (e.hp <= 0) {
+          e.alive = false;
+          e.deadAt = Date.now();
+          e.deathPhase = 'falling';
+          e.fallProgress = 0;
+          state.score = (state.score || 0) + 1;
+          state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
+        }
+      }
     }
   }
-  state.magic.lastFreezeAt = { x, y, until };
+  state.magic.lastFreezeAt = { x, y, until, radius };
 }
 
-function castFireSea(state, x, y) {
+function castFireSea(state, x, y, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.FIRE_SEA);
+  const mult = getSkillMultiplier(level);
+  const damageMult = weatherMod?.damageMult ?? 1;
+  const durationMs = Math.floor(FIRE_SEA_DURATION_MS * mult.duration);
+  const damagePerTick = Math.max(1, Math.floor(FIRE_SEA_DAMAGE_PER_TICK * mult.damage * damageMult));
+  const length = Math.floor(FIRE_SEA_LENGTH * mult.radius);
+  const width = Math.floor(FIRE_SEA_WIDTH * mult.radius);
+
   const now = Date.now();
   state.magic.fireSeas = state.magic.fireSeas || [];
   const zone = {
     x,
     y,
-    length: FIRE_SEA_LENGTH,
-    width: FIRE_SEA_WIDTH,
+    length,
+    width,
+    durationMs,
+    damagePerTick,
     angle: 0,
     createdAt: now,
     lastTick: now,
@@ -267,7 +482,12 @@ function castFireSea(state, x, y) {
   state.magic.fireSeas.push(zone);
 }
 
-function castMissile(state, targetX, targetY) {
+function castMissile(state, targetX, targetY, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.MISSILE);
+  const mult = getSkillMultiplier(level);
+  const damage = Math.floor(MISSILE_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+  const radius = Math.floor(MISSILE_EXPLODE_RADIUS * mult.radius * (weatherMod?.radiusMult ?? 1));
+
   const cx = state.castleCx ?? state.width / 2;
   const cy = state.castleCy ?? state.height * 0.75;
   const dist = Math.hypot(targetX - cx, targetY - cy) || 1;
@@ -282,11 +502,105 @@ function castMissile(state, targetX, targetY) {
     t: 0,
     tIncrement: 1 / totalFrames,
     arcHeight,
-    damage: MISSILE_DAMAGE,
-    radius: MISSILE_EXPLODE_RADIUS,
+    damage,
+    radius,
     exploded: false,
     explosionAt: 0,
   });
+}
+
+function castIceArrow(state, targetX, targetY, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.ICE_ARROW);
+  const mult = getSkillMultiplier(level);
+  const damage = Math.floor(ICE_ARROW_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+  const slowMs = Math.floor(ICE_ARROW_SLOW_MS * mult.duration * (weatherMod?.durationMult ?? 1));
+  const cx = state.castleCx ?? state.width / 2;
+  const cy = state.castleCy ?? state.height * 0.75;
+  const dx = targetX - cx;
+  const dy = targetY - cy;
+  const len = Math.hypot(dx, dy) || 1;
+  state.magic.iceArrows = state.magic.iceArrows || [];
+  state.magic.iceArrows.push({
+    x: cx,
+    y: cy,
+    vx: (dx / len) * ICE_ARROW_SPEED,
+    vy: (dy / len) * ICE_ARROW_SPEED,
+    damage,
+    slowMs,
+    hit: false,
+  });
+}
+
+function castFrostRing(state, x, y, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.FROST_RING);
+  const mult = getSkillMultiplier(level);
+  const radius = Math.floor(FROST_RING_RADIUS * mult.radius * (weatherMod?.radiusMult ?? 1));
+  const damage = Math.floor(FROST_RING_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+  const freezeMs = Math.floor(FROST_RING_FREEZE_MS * mult.duration * (weatherMod?.durationMult ?? 1));
+  const until = Date.now() + freezeMs;
+  const enemies = state.enemies || [];
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const dist = Math.hypot(e.x - x, e.y - y);
+    if (dist <= radius) {
+      e.frozenUntil = Math.max(e.frozenUntil || 0, until);
+      e.hp = Math.max(0, (e.hp ?? e.maxHp) - Math.max(1, damage - (e.defense ?? 0)));
+      e.hitFlashUntil = Date.now() + 280;
+      spawnBloodParticles(state, e.x, e.y, 3);
+      if (e.hp <= 0) {
+        e.alive = false;
+        e.deadAt = Date.now();
+        e.deathPhase = 'falling';
+        e.fallProgress = 0;
+        state.score = (state.score || 0) + 1;
+        state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
+      }
+    }
+  }
+  state.magic.frostRings = state.magic.frostRings || [];
+  state.magic.frostRings.push({ x, y, radius, castAt: Date.now() });
+}
+
+function castBallista(state, targetX, targetY, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.BALLISTA);
+  const mult = getSkillMultiplier(level);
+  const damage = Math.floor(BALLISTA_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+  const cx = state.castleCx ?? state.width / 2;
+  const cy = state.castleCy ?? state.height * 0.75;
+  const dx = targetX - cx;
+  const dy = targetY - cy;
+  const len = Math.hypot(dx, dy) || 1;
+  state.magic.ballistaBolts = state.magic.ballistaBolts || [];
+  state.magic.ballistaBolts.push({
+    x: cx,
+    y: cy,
+    vx: (dx / len) * BALLISTA_SPEED,
+    vy: (dy / len) * BALLISTA_SPEED,
+    damage,
+    hit: false,
+  });
+}
+
+function castVolley(state, targetX, targetY, weatherMod) {
+  const level = getSkillLevel(state, SKILL_IDS.VOLLEY);
+  const mult = getSkillMultiplier(level);
+  const damage = Math.floor(VOLLEY_DAMAGE * mult.damage * (weatherMod?.damageMult ?? 1));
+  const cx = state.castleCx ?? state.width / 2;
+  const cy = state.castleCy ?? state.height * 0.75;
+  const baseAngle = Math.atan2(targetY - cy, targetX - cx);
+  state.magic.volleyArrows = state.magic.volleyArrows || [];
+  for (let i = 0; i < VOLLEY_COUNT; i++) {
+    const s = (i - (VOLLEY_COUNT - 1) / 2) * VOLLEY_SPREAD;
+    const angle = baseAngle + s;
+    state.magic.volleyArrows.push({
+      x: cx,
+      y: cy,
+      vx: Math.cos(angle) * VOLLEY_SPEED,
+      vy: Math.sin(angle) * VOLLEY_SPEED,
+      damage,
+      hit: false,
+    });
+  }
 }
 
 export function updateMagic(state) {
@@ -338,8 +652,9 @@ export function updateMagic(state) {
 
   const now = Date.now();
   (m.fireSeas || []).forEach((zone) => {
+    const durationMs = zone.durationMs ?? FIRE_SEA_DURATION_MS;
     const zoneAge = now - zone.createdAt;
-    const zoneLife = Math.max(0, 1 - zoneAge / FIRE_SEA_DURATION_MS);
+    const zoneLife = Math.max(0, 1 - zoneAge / durationMs);
     const seg = fireSeaSegment(zone);
     const halfWidth = (zone.width ?? FIRE_SEA_WIDTH) / 2;
     if (now - zone.lastTick >= FIRE_SEA_TICK_MS) {
@@ -349,7 +664,7 @@ export function updateMagic(state) {
         if (!e.alive) continue;
         const d = distanceToSegment(e.x, e.y, seg.x1, seg.y1, seg.x2, seg.y2);
         if (d <= halfWidth) {
-          const baseRaw = Math.max(1, FIRE_SEA_DAMAGE_PER_TICK - Math.floor((e.defense ?? 0) / 4));
+          const baseRaw = Math.max(1, (zone.damagePerTick ?? FIRE_SEA_DAMAGE_PER_TICK) - Math.floor((e.defense ?? 0) / 4));
           const raw = Math.max(0, Math.floor(baseRaw * zoneLife));
           if (raw > 0) {
             e.hp -= raw;
@@ -400,7 +715,7 @@ export function updateMagic(state) {
       });
     }
   });
-  m.fireSeas = (m.fireSeas || []).filter((z) => now - z.createdAt < FIRE_SEA_DURATION_MS);
+  m.fireSeas = (m.fireSeas || []).filter((z) => now - z.createdAt < (z.durationMs ?? FIRE_SEA_DURATION_MS));
 
   (m.missiles || []).forEach((missile) => {
     if (missile.exploded) return;
@@ -443,6 +758,98 @@ export function updateMagic(state) {
   m.missiles = (m.missiles || []).filter(
     (missile) => !missile.exploded || now - missile.explosionAt < MISSILE_EXPLOSION_DURATION_MS
   );
+
+  (m.iceArrows || []).forEach((arr) => {
+    if (arr.hit) return;
+    arr.x += arr.vx;
+    arr.y += arr.vy;
+    const enemies = state.enemies || [];
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = Math.hypot(arr.x - e.x, arr.y - e.y);
+      if (d < ICE_ARROW_HIT_R) {
+        e.hp = Math.max(0, (e.hp ?? e.maxHp) - Math.max(1, arr.damage - (e.defense ?? 0)));
+        e.frozenUntil = Math.max(e.frozenUntil || 0, now + (arr.slowMs ?? ICE_ARROW_SLOW_MS));
+        e.hitFlashUntil = now + 300;
+        spawnBloodParticles(state, e.x, e.y, 3);
+        if (e.hp <= 0) {
+          e.alive = false;
+          e.deadAt = now;
+          e.deathPhase = 'falling';
+          e.fallProgress = 0;
+          state.score = (state.score || 0) + 1;
+          state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
+        }
+        arr.hit = true;
+        return;
+      }
+    }
+  });
+  m.iceArrows = (m.iceArrows || []).filter((arr) => !arr.hit && arr.x > -50 && arr.x < w + 50 && arr.y > -50 && arr.y < h + 50);
+
+  (m.ballistaBolts || []).forEach((arr) => {
+    if (arr.hit) return;
+    arr.x += arr.vx;
+    arr.y += arr.vy;
+    const enemies = state.enemies || [];
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = Math.hypot(arr.x - e.x, arr.y - e.y);
+      if (d < BALLISTA_HIT_R) {
+        const raw = Math.max(1, arr.damage - Math.floor((e.defense ?? 0) * 0.5));
+        e.hp = Math.max(0, (e.hp ?? e.maxHp) - raw);
+        e.hitFlashUntil = now + 400;
+        spawnBloodParticles(state, e.x, e.y, 5);
+        if (e.hp <= 0) {
+          e.alive = false;
+          e.deadAt = now;
+          e.deathPhase = 'falling';
+          e.fallProgress = 0;
+          state.score = (state.score || 0) + 1;
+          state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
+        }
+        arr.hit = true;
+        return;
+      }
+    }
+  });
+  m.ballistaBolts = (m.ballistaBolts || []).filter((arr) => !arr.hit && arr.x > -50 && arr.x < w + 50 && arr.y > -50 && arr.y < h + 50);
+
+  (m.volleyArrows || []).forEach((arr) => {
+    if (arr.hit) return;
+    arr.x += arr.vx;
+    arr.y += arr.vy;
+    const enemies = state.enemies || [];
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = Math.hypot(arr.x - e.x, arr.y - e.y);
+      if (d < VOLLEY_HIT_R) {
+        for (const e2 of enemies) {
+          if (!e2.alive) continue;
+          const d2 = Math.hypot(arr.x - e2.x, arr.y - e2.y);
+          if (d2 <= VOLLEY_AOE_R) {
+            const raw = Math.max(1, arr.damage - (e2.defense ?? 0));
+            e2.hp = Math.max(0, (e2.hp ?? e2.maxHp) - raw);
+            e2.hitFlashUntil = now + 250;
+            spawnBloodParticles(state, e2.x, e2.y, 2);
+            if (e2.hp <= 0) {
+              e2.alive = false;
+              e2.deadAt = now;
+              e2.deathPhase = 'falling';
+              e2.fallProgress = 0;
+              state.score = (state.score || 0) + 1;
+              state.gold = (state.gold || 0) + (e2.goldReward ?? state.goldPerKill ?? 8);
+            }
+          }
+        }
+        arr.hit = true;
+        return;
+      }
+    }
+  });
+  m.volleyArrows = (m.volleyArrows || []).filter((arr) => !arr.hit && arr.x > -50 && arr.x < w + 50 && arr.y > -50 && arr.y < h + 50);
+
+  m.frostRings = (m.frostRings || []).filter((r) => now - r.castAt < FROST_RING_VISIBLE_MS);
 
   for (const e of state.enemies || []) {
     if (!e.alive || !e.burningUntil || e.burningUntil <= now) continue;
@@ -521,19 +928,21 @@ export function drawMagic(ctx, state) {
   if (m.lastFreezeAt && m.lastFreezeAt.until > now) {
     const t = 1 - (m.lastFreezeAt.until - now) / FREEZE_DURATION_MS;
     const alpha = 0.15 + t * 0.1;
+    const freezeR = m.lastFreezeAt.radius ?? FREEZE_RADIUS;
     ctx.strokeStyle = `rgba(150,220,255,${alpha})`;
     ctx.fillStyle = `rgba(100,180,255,${alpha * 0.25})`;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(m.lastFreezeAt.x, m.lastFreezeAt.y, FREEZE_RADIUS, 0, Math.PI * 2);
+    ctx.arc(m.lastFreezeAt.x, m.lastFreezeAt.y, freezeR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   }
 
   for (const zone of m.fireSeas || []) {
     const age = now - zone.createdAt;
-    if (age >= FIRE_SEA_DURATION_MS) continue;
-    const life = Math.max(0, 1 - age / FIRE_SEA_DURATION_MS);
+    const zoneDuration = zone.durationMs ?? FIRE_SEA_DURATION_MS;
+    if (age >= zoneDuration) continue;
+    const life = Math.max(0, 1 - age / zoneDuration);
     const alpha = FIRE_SEA_ALPHA * life;
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -619,6 +1028,71 @@ export function drawMagic(ctx, state) {
     ctx.arc(missile.x + nx * 0.5, missile.y + ny * 0.5, 4, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  for (const arr of m.iceArrows || []) {
+    if (arr.hit) continue;
+    const len = 12;
+    const nx = (arr.vx / (Math.hypot(arr.vx, arr.vy) || 1)) * len;
+    const ny = (arr.vy / (Math.hypot(arr.vx, arr.vy) || 1)) * len;
+    ctx.strokeStyle = 'rgba(180,220,255,0.95)';
+    ctx.fillStyle = 'rgba(220,240,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(arr.x - nx, arr.y - ny);
+    ctx.lineTo(arr.x + nx, arr.y + ny);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(arr.x + nx, arr.y + ny, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (const r of m.frostRings || []) {
+    const age = now - r.castAt;
+    const t = 1 - age / FROST_RING_VISIBLE_MS;
+    const alpha = t * 0.4;
+    ctx.strokeStyle = `rgba(150,220,255,${alpha})`;
+    ctx.fillStyle = `rgba(100,180,255,${alpha * 0.2})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.radius ?? FROST_RING_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  for (const arr of m.ballistaBolts || []) {
+    if (arr.hit) continue;
+    const len = 18;
+    const nx = (arr.vx / (Math.hypot(arr.vx, arr.vy) || 1)) * len;
+    const ny = (arr.vy / (Math.hypot(arr.vx, arr.vy) || 1)) * len;
+    ctx.fillStyle = '#5a5a5a';
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(arr.x - nx, arr.y - ny);
+    ctx.lineTo(arr.x + nx, arr.y + ny);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(arr.x + nx, arr.y + ny, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  for (const arr of m.volleyArrows || []) {
+    if (arr.hit) continue;
+    const len = 10;
+    const nx = (arr.vx / (Math.hypot(arr.vx, arr.vy) || 1)) * len;
+    const ny = (arr.vy / (Math.hypot(arr.vx, arr.vy) || 1)) * len;
+    ctx.strokeStyle = '#6a6a5a';
+    ctx.fillStyle = '#7a7a6a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(arr.x - nx, arr.y - ny);
+    ctx.lineTo(arr.x + nx, arr.y + ny);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(arr.x + nx, arr.y + ny, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export function getSkillCooldownRemaining(state, skillId) {
@@ -634,6 +1108,10 @@ export function getSkillName(skillId) {
     [SKILL_IDS.FREEZE]: '冻结',
     [SKILL_IDS.FIRE_SEA]: '火海',
     [SKILL_IDS.MISSILE]: '导弹',
+    [SKILL_IDS.ICE_ARROW]: '冰箭',
+    [SKILL_IDS.FROST_RING]: '冰环',
+    [SKILL_IDS.BALLISTA]: '弩炮',
+    [SKILL_IDS.VOLLEY]: '齐射',
   };
   return names[skillId] || '';
 }
@@ -641,5 +1119,6 @@ export function getSkillName(skillId) {
 export function selectSkill(state, skillId) {
   if (!state.magic) return;
   if (isOnCooldown(state, skillId)) return;
+  if (!canUseSkillInWeather(state, skillId)) return;
   state.magic.selectedSkill = state.magic.selectedSkill === skillId ? null : skillId;
 }

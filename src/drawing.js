@@ -1,16 +1,27 @@
 import { tryCastMagic } from './magic.js';
 import { hitTestSoldiers } from './soldiers.js';
 import { hitTestEnemies } from './enemies.js';
+import { getCastleRadius } from './canvas.js';
+
+function hitTestCastle(state, px, py) {
+  const cx = state.castleCx ?? 0;
+  const cy = state.castleCy ?? 0;
+  return Math.hypot(px - cx, py - cy) < (getCastleRadius() + 15);
+}
 
 /**
  * Line drawing: mouse events, storage, and rendering.
- * Click on unit shows attributes; wave complete / magic / draw line as before.
+ * Click on castle shows castle panel; click on unit shows attributes; wave complete / magic / draw line as before.
  */
 export function setupDrawing(canvas, state, clientToCanvas, { onWaveComplete } = {}) {
   const onDown = (e) => {
     const p = clientToCanvas(canvas, e.clientX, e.clientY);
     if (state.waveState === 'completed' && onWaveComplete) {
       onWaveComplete();
+      return;
+    }
+    if (hitTestCastle(state, p.x, p.y)) {
+      state.selectedUnit = { type: 'castle' };
       return;
     }
     const soldier = hitTestSoldiers(state, p.x, p.y);
@@ -24,6 +35,7 @@ export function setupDrawing(canvas, state, clientToCanvas, { onWaveComplete } =
       return;
     }
     if (state.magic?.selectedSkill && tryCastMagic(state, p.x, p.y)) return;
+    state.selectedUnit = null;
     state.isDrawing = true;
     state.currentLine = [{ x: p.x, y: p.y }];
   };

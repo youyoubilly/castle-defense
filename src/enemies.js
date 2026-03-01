@@ -17,7 +17,22 @@ const ENEMY_TYPES = {
   normal: { hp: 60, defense: 10, attack: 10, speed: 1.0, radius: 10, gold: 8, name: '步兵' },
   shield: { hp: 55, defense: 18, attack: 8, speed: 0.9, radius: 10, gold: 10, name: '盾卫' },
   heavy: { hp: 120, defense: 15, attack: 16, speed: 0.6, radius: 14, gold: 15, name: '重甲兵' },
+  siege: { hp: 100, defense: 12, attack: 18, speed: 0.55, radius: 12, gold: 22, name: '攻城兵' },
+  archer: { hp: 45, defense: 4, attack: 12, speed: 0.8, radius: 10, gold: 12, name: '敌弓箭手' },
 };
+
+const ENEMY_ARCHER_STOP_RANGE = 200;
+const ENEMY_ARCHER_SHOOT_RANGE = 220;
+const ENEMY_ARCHER_INTERVAL = 55;
+const ENEMY_ARROW_SPEED = 5;
+const ENEMY_ARROW_HIT_R = 18;
+const ENEMY_ARROW_MAX_AGE = 120;
+
+/** 城堡等级对应的防御力（冲城时减少对己方士兵的伤害） */
+function getCastleDefenseForBreach(level) {
+  const L = Math.max(1, Math.min(5, level || 1));
+  return [0, 0, 2, 4, 6, 8][L];
+}
 
 export function getEnemyTypeName(typeId) {
   return ENEMY_TYPES[typeId]?.name ?? '敌兵';
@@ -30,33 +45,43 @@ export function getGroundY(height) {
 
 function pickEnemyType() {
   const r = Math.random();
-  if (r < 0.6) return 'normal';
-  if (r < 0.85) return 'shield';
-  return 'heavy';
+  if (r < 0.50) return 'normal';
+  if (r < 0.75) return 'shield';
+  if (r < 0.90) return 'heavy';
+  if (r < 0.97) return 'siege';
+  return 'archer';
 }
 
-/** By wave: wave 1 easier (mostly normal), later waves more shield/heavy. */
+/** By wave: wave 1 easier (mostly normal), later waves more shield/heavy/siege. */
 export function pickEnemyTypeByWave(wave) {
   const w = Math.max(1, wave || 1);
   const r = Math.random();
   if (w <= 1) {
-    if (r < 0.85) return 'normal';
-    if (r < 0.96) return 'shield';
-    return 'heavy';
+    if (r < 0.78) return 'normal';
+    if (r < 0.92) return 'shield';
+    if (r < 0.98) return 'heavy';
+    if (r < 0.995) return 'siege';
+    return 'archer';
   }
   if (w <= 2) {
-    if (r < 0.68) return 'normal';
-    if (r < 0.88) return 'shield';
-    return 'heavy';
+    if (r < 0.58) return 'normal';
+    if (r < 0.80) return 'shield';
+    if (r < 0.92) return 'heavy';
+    if (r < 0.97) return 'siege';
+    return 'archer';
   }
   if (w <= 3) {
-    if (r < 0.55) return 'normal';
-    if (r < 0.82) return 'shield';
-    return 'heavy';
+    if (r < 0.46) return 'normal';
+    if (r < 0.70) return 'shield';
+    if (r < 0.86) return 'heavy';
+    if (r < 0.94) return 'siege';
+    return 'archer';
   }
-  if (r < 0.48) return 'normal';
-  if (r < 0.78) return 'shield';
-  return 'heavy';
+  if (r < 0.38) return 'normal';
+  if (r < 0.64) return 'shield';
+  if (r < 0.82) return 'heavy';
+  if (r < 0.92) return 'siege';
+  return 'archer';
 }
 
 /** Total enemies to spawn in this wave. */
@@ -93,6 +118,7 @@ export function createEnemy(x, y, tx, ty, type) {
     name: t.name ?? getEnemyTypeName(kind),
     alive: true,
     lastAttackFrame: 0,
+    lastShotFrame: 0,
   };
 }
 
@@ -147,7 +173,16 @@ export function updateEnemies(state, width, height) {
 
     resolveLineCollisions(e, state.lines);
 
-    const distToCastle = Math.hypot(e.x - state.castleCx, e.y - state.castleCy);
+    let distToCastle = Math.hypot(e.x - state.castleCx, e.y - state.castleCy);
+    if (e.type === 'archer' && distToCastle < ENEMY_ARCHER_STOP_RANGE && distToCastle > 0) {
+      const cx = state.castleCx;
+      const cy = state.castleCy;
+      e.x = cx + (e.x - cx) / distToCastle * ENEMY_ARCHER_STOP_RANGE;
+      e.y = cy + (e.y - cy) / distToCastle * ENEMY_ARCHER_STOP_RANGE;
+      e.vx = 0;
+      e.vy = 0;
+      distToCastle = ENEMY_ARCHER_STOP_RANGE;
+    }
     const castleHealth = state.castleHealth ?? 10;
     if (castleHealth > 0 && distToCastle < castleR + e.radius) {
       e.alive = false;
@@ -157,8 +192,10 @@ export function updateEnemies(state, width, height) {
       state.castleHealth = castleHealth - 1;
       const fieldSoldiers = (state.soldiers || []).filter((s) => s.status === 'field');
       if (fieldSoldiers.length > 0) {
+        const def = getCastleDefenseForBreach(state.castleLevel ?? 1);
+        const breachDmg = Math.max(5, 30 - def * 3);
         const hit = fieldSoldiers[Math.floor(Math.random() * fieldSoldiers.length)];
-        hit.hp = Math.max(0, (hit.hp || hit.maxHp) - 30);
+        hit.hp = Math.max(0, (hit.hp || hit.maxHp) - breachDmg);
         spawnBloodParticles(state, hit.x, hit.y, 3);
       }
     }
@@ -179,11 +216,121 @@ export function updateEnemies(state, width, height) {
 }
 
 /**
+ * Enemy archers shoot at nearest soldier in range, or at castle. Spawns into state.enemyArrows.
+ */
+export function applyEnemyArcherShoot(state) {
+  const frame = state.frameCount || 0;
+  const cx = state.castleCx ?? 0;
+  const cy = state.castleCy ?? 0;
+  const fieldSoldiers = (state.soldiers || []).filter((s) => s.status === 'field');
+
+  for (const e of state.enemies) {
+    if (!e.alive || e.type !== 'archer') continue;
+    if (e.frozenUntil && e.frozenUntil > Date.now()) continue;
+    const distToCastle = Math.hypot(e.x - cx, e.y - cy);
+    if (distToCastle > ENEMY_ARCHER_SHOOT_RANGE) continue;
+    if ((frame - (e.lastShotFrame || 0)) < ENEMY_ARCHER_INTERVAL) continue;
+
+    let targetSoldier = null;
+    let targetCastle = false;
+    let tx = cx;
+    let ty = cy;
+    let nearestDist = 201;
+    for (const s of fieldSoldiers) {
+      const d = Math.hypot(e.x - s.x, e.y - s.y);
+      if (d < 200 && d < nearestDist) {
+        nearestDist = d;
+        targetSoldier = s;
+        tx = s.x;
+        ty = s.y;
+      }
+    }
+    if (!targetSoldier) targetCastle = true;
+
+    const dx = tx - e.x;
+    const dy = ty - e.y;
+    const len = Math.hypot(dx, dy) || 1;
+    if (!state.enemyArrows) state.enemyArrows = [];
+    state.enemyArrows.push({
+      x: e.x,
+      y: e.y,
+      vx: (dx / len) * ENEMY_ARROW_SPEED,
+      vy: (dy / len) * ENEMY_ARROW_SPEED,
+      damage: e.attack ?? 12,
+      targetSoldier,
+      targetCastle,
+      age: 0,
+    });
+    e.lastShotFrame = frame;
+  }
+}
+
+/**
+ * Update enemy arrows; apply damage to soldier or castle on hit.
+ */
+export function updateEnemyArrows(state) {
+  if (!state.enemyArrows || state.enemyArrows.length === 0) return;
+  const cx = state.castleCx ?? 0;
+  const cy = state.castleCy ?? 0;
+  const castleR = getCastleRadius();
+
+  state.enemyArrows = state.enemyArrows.filter((arr) => {
+    arr.x += arr.vx;
+    arr.y += arr.vy;
+    arr.age++;
+    if (arr.age > ENEMY_ARROW_MAX_AGE) return false;
+
+    if (arr.targetSoldier) {
+      const d = Math.hypot(arr.x - arr.targetSoldier.x, arr.y - arr.targetSoldier.y);
+      if (d < ENEMY_ARROW_HIT_R) {
+        const s = arr.targetSoldier;
+        s.hp = Math.max(0, (s.hp ?? s.maxHp) - (arr.damage ?? 12));
+        s.hitFlashUntil = Date.now() + 280;
+        spawnBloodParticles(state, s.x, s.y, 3);
+        return false;
+      }
+    }
+    if (arr.targetCastle) {
+      const d = Math.hypot(arr.x - cx, arr.y - cy);
+      if (d < castleR + 20) {
+        state.castleHealth = Math.max(0, (state.castleHealth ?? 10) - 1);
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+/**
+ * Draw enemy arrows (darker / red tint to distinguish from ours).
+ */
+export function drawEnemyArrows(ctx, state) {
+  if (!state.enemyArrows || state.enemyArrows.length === 0) return;
+  const speed = ENEMY_ARROW_SPEED;
+  state.enemyArrows.forEach((arr) => {
+    const len = 10;
+    const tipX = arr.x + (arr.vx / speed) * len;
+    const tipY = arr.y + (arr.vy / speed) * len;
+    ctx.strokeStyle = '#6b4030';
+    ctx.fillStyle = '#4a3020';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(arr.x, arr.y);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+}
+
+/**
  * Enemies in melee range of a soldier deal damage to the nearest soldier (with cooldown).
  */
 export function applyEnemyDamageToSoldiers(state) {
   const range = state.soldierRange ?? 100;
-  const defense = state.soldierDefense ?? 5;
   const frame = state.frameCount || 0;
   const fieldSoldiers = (state.soldiers || []).filter((s) => s.status === 'field');
   if (fieldSoldiers.length === 0) return;
@@ -205,7 +352,8 @@ export function applyEnemyDamageToSoldiers(state) {
     if (frame - (e.lastAttackFrame || 0) < interval) continue;
     e.lastAttackFrame = frame;
     const rawDmg = e.attack ?? 10;
-    const damage = Math.max(1, rawDmg - defense);
+    const soldierDefense = nearest.defense ?? state.soldierDefense ?? 5;
+    const damage = Math.max(1, rawDmg - soldierDefense);
     nearest.hp = Math.max(0, (nearest.hp ?? nearest.maxHp) - damage);
     nearest.hitFlashUntil = Date.now() + 280;
     spawnBloodParticles(state, nearest.x, nearest.y, 3);
@@ -241,17 +389,19 @@ export function applySoldierDamage(state) {
 
   for (const e of state.enemies) {
     if (!e.alive) continue;
-    let inRangeOfSoldier = false;
+    let nearestSoldier = null;
+    let nearestDist = range + 1;
     for (const s of fieldSoldiers) {
       const dist = Math.hypot(e.x - s.x, e.y - s.y);
-      if (dist <= range) {
-        inRangeOfSoldier = true;
-        break;
+      if (dist <= range && dist < nearestDist) {
+        nearestDist = dist;
+        nearestSoldier = s;
       }
     }
-    if (inRangeOfSoldier) {
+    if (nearestSoldier) {
+      const soldierAttack = nearestSoldier.attack ?? baseDamage;
       const isShieldCounter = Math.random() < shieldChance;
-      const { damage: rawDmg, isCrit } = computeDamage(baseDamage, e.defense, critChance, critMult);
+      const { damage: rawDmg, isCrit } = computeDamage(soldierAttack, e.defense, critChance, critMult);
       const damage = isShieldCounter ? rawDmg * 1.2 : rawDmg;
       e.hp -= damage;
       spawnBloodParticles(state, e.x, e.y, 4);
@@ -303,17 +453,18 @@ export function drawEnemies(ctx, state) {
     const y = e.y;
     const isHeavy = e.type === 'heavy';
     const isShield = e.type === 'shield';
+    const isArcher = e.type === 'archer';
     const scale = isHeavy ? 1.35 : 1;
 
     if (e.alive) {
-      drawAliveEnemy(ctx, e, x, y, scale, isShield, now);
+      drawAliveEnemy(ctx, e, x, y, scale, isShield, isArcher, now);
     } else {
       drawDeadEnemy(ctx, e, x, y, scale);
     }
   }
 }
 
-function drawAliveEnemy(ctx, e, x, y, scale, isShield, now) {
+function drawAliveEnemy(ctx, e, x, y, scale, isShield, isArcher, now) {
   const r = 4.5 * scale;
   const bodyLen = 8 * scale;
   const armLen = 7 * scale;
@@ -363,30 +514,43 @@ function drawAliveEnemy(ctx, e, x, y, scale, isShield, now) {
     ctx.fill();
     ctx.stroke();
     ctx.strokeStyle = wasCrit ? '#ffcc00' : flashing ? '#fff' : '#8b2500';
-  } else {
+  } else if (!isArcher) {
     ctx.beginPath();
     ctx.moveTo(x, y + 1);
     ctx.lineTo(e.vx < 0 ? x + armLen : x - armLen, y + 6);
     ctx.stroke();
   }
 
-  const swordTipX = x + dir * (4 * scale + swordLen * 0.8);
-  const swordTipY = y + 4 + swordLen * 0.4;
-  ctx.strokeStyle = '#5a5a5a';
-  ctx.fillStyle = '#7a7a7a';
-  ctx.lineWidth = 1.5 * scale;
-  ctx.beginPath();
-  ctx.moveTo(x + dir * 4, y + 2);
-  ctx.lineTo(swordTipX, swordTipY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(swordTipX, swordTipY);
-  ctx.lineTo(swordTipX - dir * 1.5, swordTipY - 0.8);
-  ctx.lineTo(swordTipX + dir * 0.5, swordTipY + 0.8);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = '#8b2500';
+  if (isArcher) {
+    ctx.strokeStyle = '#5a4a3a';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath();
+    ctx.arc(x + dir * 6, y + 2, 6, -0.5 * Math.PI, 0.4 * Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + dir * 2, y - 1);
+    ctx.lineTo(x + dir * 10, y + 3);
+    ctx.stroke();
+    ctx.strokeStyle = '#8b2500';
+  } else {
+    const swordTipX = x + dir * (4 * scale + swordLen * 0.8);
+    const swordTipY = y + 4 + swordLen * 0.4;
+    ctx.strokeStyle = '#5a5a5a';
+    ctx.fillStyle = '#7a7a7a';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath();
+    ctx.moveTo(x + dir * 4, y + 2);
+    ctx.lineTo(swordTipX, swordTipY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(swordTipX, swordTipY);
+    ctx.lineTo(swordTipX - dir * 1.5, swordTipY - 0.8);
+    ctx.lineTo(swordTipX + dir * 0.5, swordTipY + 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#8b2500';
+  }
 
   const phase = e.animPhase || 0;
   const step = Math.sin(phase) * legStep;
