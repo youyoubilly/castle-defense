@@ -1,5 +1,5 @@
 /**
- * Game state and main loop: clear, draw background, castle, lines, enemies; update.
+ * Game state and main loop: clear, draw background, castle, enemies; update.
  */
 
 import {
@@ -54,9 +54,6 @@ export function createState(canvas) {
 
   const state = {
     enemies: [],
-    lines: [],
-    currentLine: [],
-    isDrawing: false,
     castleCx: cx,
     castleCy: cy,
     width: w,
@@ -142,9 +139,6 @@ export function continueGame(state) {
 /** 重置为全新一局（重新开始） */
 export function resetState(state) {
   state.enemies = [];
-  state.lines = [];
-  state.currentLine = [];
-  state.isDrawing = false;
   state.castleHealth = 10;
   state.wave = 1;
   state.waveState = 'fighting';

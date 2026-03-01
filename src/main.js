@@ -4,7 +4,7 @@ import { setupDrawing } from './drawing.js';
 import { createState, gameLoop, startNextWave, resetState, continueGame, canContinue, CASTLE_MAX_LEVEL, syncCastleTowerHeight } from './game.js';
 import { startSpawning } from './enemies.js';
 import { createArchers } from './archers.js';
-import { addSoldier, getUpgradeOptions, upgradeSoldierTo } from './soldiers.js';
+import { addSoldier, getUpgradeOptions, upgradeSoldierTo, UPGRADE_COSTS } from './soldiers.js';
 import { addArtillery } from './artillery.js';
 import {
   selectSkill,
@@ -217,6 +217,27 @@ function main() {
   const soldierUpgradePanel = document.getElementById('soldier-upgrade-panel');
   const soldierUpgradeButtons = document.getElementById('soldier-upgrade-buttons');
 
+  if (soldierUpgradeButtons) {
+    soldierUpgradeButtons.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-upgrade-class]');
+      if (!btn || btn.disabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const newClassId = btn.getAttribute('data-upgrade-class');
+      if (!newClassId) return;
+      const sel = state.selectedUnit;
+      if (sel?.type !== 'soldier' || !sel.unit) return;
+      const soldier = sel.unit;
+      if ((soldier.class || 'guard') !== 'guard') return;
+      const cost = UPGRADE_COSTS[newClassId];
+      if (cost == null || (state.gold ?? 0) < cost) return;
+      if (upgradeSoldierTo(state, soldier, newClassId)) {
+        _lastSoldierUpgradeKey = '';
+        updateSoldierUpgradePanel();
+      }
+    });
+  }
+
   const castlePanel = document.getElementById('castle-panel');
   const castlePanelLevel = document.getElementById('castle-panel-level');
   const castlePanelHp = document.getElementById('castle-panel-hp');
@@ -290,16 +311,23 @@ function main() {
     });
   }
 
+  let _lastSoldierUpgradeKey = '';
   function updateSoldierUpgradePanel() {
     if (!soldierUpgradePanel || !soldierUpgradeButtons) return;
     const sel = state.selectedUnit;
     if (sel?.type !== 'soldier' || !sel.unit) {
       soldierUpgradePanel.classList.add('soldier-upgrade-hidden');
+      _lastSoldierUpgradeKey = '';
       return;
     }
     soldierUpgradePanel.classList.remove('soldier-upgrade-hidden');
     const soldier = sel.unit;
+    const gold = state.gold ?? 0;
     const options = getUpgradeOptions(soldier);
+    const key = `${soldier.class ?? 'guard'}-${gold}-${options.length}`;
+    if (key === _lastSoldierUpgradeKey) return;
+    _lastSoldierUpgradeKey = key;
+
     soldierUpgradeButtons.innerHTML = '';
     if (options.length === 0) {
       const p = document.createElement('p');
@@ -309,18 +337,12 @@ function main() {
       soldierUpgradeButtons.appendChild(p);
       return;
     }
-    const gold = state.gold ?? 0;
     options.forEach((opt) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = `升级为 ${opt.name} (${opt.cost} 金币)`;
       btn.disabled = gold < opt.cost;
-      btn.dataset.upgradeClass = opt.class;
-      btn.onclick = () => {
-        if (gold < opt.cost) return;
-        upgradeSoldierTo(state, soldier, opt.class);
-        updateSoldierUpgradePanel();
-      };
+      btn.setAttribute('data-upgrade-class', opt.class);
       soldierUpgradeButtons.appendChild(btn);
     });
   }

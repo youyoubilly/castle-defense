@@ -1,9 +1,8 @@
 /**
- * Enemies: spawn from left/right only, move toward castle, draw, castle reach, line collision.
+ * Enemies: spawn from left/right only, move toward castle, draw, castle reach.
  */
 
 import { getCastleRadius } from './canvas.js';
-import { resolveLineCollisions } from './collision.js';
 import { spawnBloodParticles } from './blood.js';
 
 const ENEMY_RADIUS = 10;
@@ -170,8 +169,6 @@ export function updateEnemies(state, width, height) {
     e.animPhase = (e.animPhase || 0) + dt * 0.45;
     e.x += e.vx * dt;
     e.y += e.vy * dt;
-
-    resolveLineCollisions(e, state.lines);
 
     let distToCastle = Math.hypot(e.x - state.castleCx, e.y - state.castleCy);
     if (e.type === 'archer' && distToCastle < ENEMY_ARCHER_STOP_RANGE && distToCastle > 0) {
