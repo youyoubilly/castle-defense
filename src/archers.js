@@ -151,6 +151,7 @@ export function updateArrows(state) {
         arr.target.deadAt = Date.now();
         arr.target.deathPhase = 'falling';
         arr.target.fallProgress = 0;
+        if (arr.target.type === 'boss_king') arr.target.spawnMinions = true;
         state.score = (state.score || 0) + 1;
         state.gold = (state.gold || 0) + (arr.target.goldReward ?? state.goldPerKill ?? 8);
       }

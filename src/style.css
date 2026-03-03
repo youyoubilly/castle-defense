@@ -459,3 +459,59 @@ html, body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+#game-over-ad {
+  background: linear-gradient(#3a3a5a, #2a2a4a);
+  color: #c8c8e8;
+  border-color: #5a5a8a;
+}
+#game-over-ad:hover {
+  background: linear-gradient(#4a4a6a, #3a3a5a);
+}
+
+#ad-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 26;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#ad-overlay.ad-overlay-hidden {
+  display: none;
+}
+.ad-overlay-content {
+  background: #2a2520;
+  color: #e0d8c8;
+  padding: 32px;
+  border-radius: 12px;
+  min-width: 280px;
+  border: 2px solid #5a5040;
+  text-align: center;
+}
+.ad-overlay-content p {
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+.ad-countdown {
+  font-size: 24px;
+  color: #e8a030;
+  font-weight: bold;
+}
+.ad-overlay-content #ad-skip {
+  margin-top: 16px;
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #4a4a4a;
+  color: #c0c0c0;
+  border: 2px solid #5a5a5a;
+}
+.ad-overlay-content #ad-skip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ad-overlay-content #ad-skip:hover:not(:disabled) {
+  background: #5a5a5a;
+}

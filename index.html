@@ -73,7 +73,15 @@
         <div class="game-over-buttons">
           <button type="button" id="game-over-restart">重新开始</button>
           <button type="button" id="game-over-continue" title="花费 300 金币恢复 5 点城堡血量并继续">300 金币继续游戏</button>
+          <button type="button" id="game-over-ad" title="观看广告恢复 5 点城堡血量并继续">看广告继续</button>
         </div>
+      </div>
+    </div>
+    <div id="ad-overlay" class="ad-overlay-hidden">
+      <div class="ad-overlay-content">
+        <p>广告播放中...</p>
+        <p class="ad-countdown"><span id="ad-countdown">5</span> 秒</p>
+        <button type="button" id="ad-skip" disabled>跳过</button>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

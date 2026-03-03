@@ -24,6 +24,9 @@ import {
   applyDragonActions,
   updateDragonAxes,
   drawDragonAxes,
+  applyKingOrbShoot,
+  updateKingOrbs,
+  drawKingOrbs,
   getWaveTotal,
   getEnemyTypeName,
 } from './enemies.js';
@@ -78,7 +81,7 @@ export function createState(canvas) {
     level: 1,
     castleLevel: 1,
     nextCastleUpgradeAt: 10,
-    soldierRange: 120,
+    soldierRange: 50,
     soldierDamage: 20,
     soldierAttackInterval: 20,
     soldierFrameCounter: 0,
@@ -95,6 +98,7 @@ export function createState(canvas) {
     arrows: [],
     enemyArrows: [],
     dragonAxes: [],
+    kingOrbs: [],
     artillery: [],
     cannonballs: [],
     maxArtillery: 2,
@@ -147,6 +151,12 @@ export function continueGame(state) {
   return true;
 }
 
+export function continueGameFromAd(state) {
+  state.castleHealth = CONTINUE_CASTLE_HEALTH;
+  state.running = true;
+  return true;
+}
+
 /** 重置为全新一局（重新开始） */
 export function resetState(state) {
   state.enemies = [];
@@ -167,7 +177,9 @@ export function resetState(state) {
   state.artillery = [];
   state.cannonballs = [];
   state.enemyArrows = [];
+  state.enemyMageCastleHits = 0;
   state.dragonAxes = [];
+  state.kingOrbs = [];
   state.bloodParticles = [];
   state.selectedUnit = null;
   state.soldierAttackBonus = 0;
@@ -237,8 +249,10 @@ export function gameLoop(ctx, canvas, state) {
   updateEnemies(state, w, h);
   applyEnemyArcherShoot(state);
   applyDragonActions(state);
+  applyKingOrbShoot(state);
   updateEnemyArrows(state);
   updateDragonAxes(state);
+  updateKingOrbs(state);
   applyArcherShoot(state);
   applySoldierArcherShoot(state);
   applySoldierMageShoot(state);
@@ -256,11 +270,13 @@ export function gameLoop(ctx, canvas, state) {
   drawArrows(ctx, state);
   drawEnemyArrows(ctx, state);
   drawDragonAxes(ctx, state);
+  drawKingOrbs(ctx, state);
   drawCannonballs(ctx, state);
   drawBloodParticles(ctx, state);
   drawWeather(ctx, state);
   drawMagic(ctx, state);
   drawHUD(ctx, state);
+  drawBossHealthBar(ctx, state);
   drawUnitPanel(ctx, state);
 
   if (state.waveState === 'completed') {
@@ -289,6 +305,55 @@ function drawHUD(ctx, state) {
   const alive = (state.enemies || []).filter((e) => e.alive).length;
   const left = Math.max(0, (state.waveEnemiesToSpawn ?? 0) - (state.waveEnemiesSpawned ?? 0));
   ctx.fillText('剩余: ' + (left + alive), 16, 136);
+}
+
+const BOSS_TYPES = ['boss_king', 'boss_general', 'boss_summoner', 'war_wolf'];
+const BOSS_BAR_TOP = 64;
+const BOSS_BAR_WIDTH = 300;
+const BOSS_BAR_HEIGHT = 14;
+
+function drawBossHealthBar(ctx, state) {
+  const bosses = (state.enemies || []).filter((e) => e.alive && BOSS_TYPES.includes(e.type));
+  if (bosses.length === 0) return;
+
+  const totalHp = bosses.reduce((s, e) => s + (e.hp ?? 0), 0);
+  const totalMaxHp = bosses.reduce((s, e) => s + (e.maxHp ?? 1), 0);
+  const ratio = totalMaxHp > 0 ? Math.max(0, Math.min(1, totalHp / totalMaxHp)) : 0;
+
+  const w = state.width || 800;
+  const x = (w - BOSS_BAR_WIDTH) / 2;
+  const y = BOSS_BAR_TOP;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.strokeStyle = 'rgba(180,80,60,0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, BOSS_BAR_WIDTH, BOSS_BAR_HEIGHT, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  if (ratio > 0) {
+    const fillW = Math.max(2, BOSS_BAR_WIDTH * ratio);
+    const grad = ctx.createLinearGradient(x, 0, x + fillW, 0);
+    grad.addColorStop(0, '#c03030');
+    grad.addColorStop(0.5, '#a02020');
+    grad.addColorStop(1, '#701818');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x + 2, y + 2, fillW - 4, BOSS_BAR_HEIGHT - 4, 4);
+    ctx.fill();
+  }
+
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const label = '首领';
+  ctx.strokeText(label, w / 2, y + BOSS_BAR_HEIGHT / 2);
+  ctx.fillText(label, w / 2, y + BOSS_BAR_HEIGHT / 2);
+  ctx.restore();
 }
 
 function drawUnitPanel(ctx, state) {

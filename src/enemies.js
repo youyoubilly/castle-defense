@@ -24,7 +24,23 @@ const ENEMY_TYPES = {
   mage: { hp: 52, defense: 5, attack: 18, speed: 0.75, radius: 10, gold: 14, name: '魔法师', magicDefense: 14 },
   dragon: { hp: 95, defense: 8, attack: 20, speed: 0.72, radius: 14, gold: 28, name: '飞龙骑士', magicDefense: 6, fireDamage: 28 },
   dragon_warrior: { hp: 140, defense: 12, attack: 26, speed: 0.65, radius: 16, gold: 42, name: '飞龙战士', magicDefense: 10, fireDamage: 36 },
+  boss_king: { hp: 500, defense: 22, attack: 30, speed: 0.32, radius: 20, gold: 115, name: '国王', magicDefense: 18, magicAttack: 28 },
+  king_guard: { hp: 28, defense: 4, attack: 12, speed: 1.45, radius: 8, gold: 5, name: '国王亲卫', magicDefense: 2 },
+  boss_general: { hp: 200, defense: 14, attack: 27, speed: 0.68, radius: 14, gold: 52, name: '将军', magicDefense: 8 },
+  elite_guard: { hp: 72, defense: 11, attack: 13, speed: 0.88, radius: 10, gold: 11, name: '精锐', magicDefense: 5 },
 };
+const GENERAL_BOSS_WAVE_INTERVAL = 3;
+const GENERAL_ELITE_MIN = 2;
+const GENERAL_ELITE_MAX = 3;
+const KING_BOSS_WAVE_INTERVAL = 6;
+const KING_GUARD_COUNT = 15;
+const KING_ORB_INTERVAL = 22;
+const KING_ORB_COUNT = 3;
+const KING_ORB_DAMAGE = 8;
+const KING_ORB_SPEED = 5.5;
+const KING_ORB_HIT_R = 16;
+const KING_ORB_MAX_AGE = 80;
+const KING_ORB_SPREAD = 0.25;
 const FLIGHT_ALTITUDE = 52;
 const DRAGON_AXE_RANGE = 220;
 const DRAGON_FIRE_CLOSE_RANGE = 68;
@@ -169,6 +185,10 @@ export function createEnemy(x, y, tx, ty, type) {
     e.lastFireFrame = 0;
     e.fireDamage = t.fireDamage ?? Math.floor((t.attack ?? 20) * 1.4);
   }
+  if (kind === 'boss_king') {
+    e.magicAttack = t.magicAttack ?? 28;
+    e.lastOrbFrame = 0;
+  }
   return e;
 }
 
@@ -263,10 +283,46 @@ function isCommanderSpawnIndex(state) {
   return spawned === total - 1;
 }
 
+/** 第 6、12、18… 波第一个刷怪位出国王 Boss */
+function isKingBossSpawnIndex(state) {
+  const wave = state.wave ?? 1;
+  const spawned = state.waveEnemiesSpawned ?? 0;
+  return wave % KING_BOSS_WAVE_INTERVAL === 0 && spawned === 0;
+}
+
+/** 第 3、9、15… 波（且非国王波）第一个刷怪位出将军小 Boss */
+function isGeneralBossSpawnIndex(state) {
+  const wave = state.wave ?? 1;
+  const spawned = state.waveEnemiesSpawned ?? 0;
+  return wave % GENERAL_BOSS_WAVE_INTERVAL === 0 && wave % KING_BOSS_WAVE_INTERVAL !== 0 && spawned === 0;
+}
+
 /** 生成一名指挥官（戴帽、高血），用于波末压轴。 */
 function spawnCommander(state, width, height) {
   const { x, y } = getBossSpawnPosition(width, height);
   state.enemies.push(createEnemy(x, y, state.castleCx, state.castleCy, 'commander'));
+}
+
+/** 生成国王 Boss（皇冠、红袍、法杖），第 6/12/18… 波。 */
+function spawnKingBoss(state, width, height) {
+  const { x, y } = getBossSpawnPosition(width, height);
+  state.enemies.push(createEnemy(x, y, state.castleCx, state.castleCy, 'boss_king'));
+}
+
+/** 生成将军小 Boss（骑黑马）+ 2～3 名精锐随从，第 3/9/15… 波。 */
+function spawnGeneralBoss(state, width, height) {
+  const { x, y } = getBossSpawnPosition(width, height);
+  const cx = state.castleCx;
+  const cy = state.castleCy;
+  state.enemies.push(createEnemy(x, y, cx, cy, 'boss_general'));
+  const count = GENERAL_ELITE_MIN + Math.floor(Math.random() * (GENERAL_ELITE_MAX - GENERAL_ELITE_MIN + 1));
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 0.8 + 0.2;
+    const side = x < state.width / 2 ? 1 : -1;
+    const ox = Math.cos(angle) * side * 28 + (Math.random() - 0.5) * 8;
+    const oy = Math.sin(angle) * 14 + (Math.random() - 0.5) * 6;
+    state.enemies.push(createEnemy(x + ox, y + oy, cx, cy, 'elite_guard'));
+  }
 }
 
 /** Wave-based: spawn one enemy; 每波最后一只是指挥官；每 5 波中间 2 只为 Boss。 */
@@ -277,7 +333,11 @@ export function trySpawnWaveEnemy(state, width, height) {
   const interval = getSpawnIntervalMs(state.wave);
   if (now - (state.lastSpawnTime ?? 0) < interval) return;
   state.lastSpawnTime = now;
-  if (isCommanderSpawnIndex(state)) {
+  if (isKingBossSpawnIndex(state)) {
+    spawnKingBoss(state, width, height);
+  } else if (isGeneralBossSpawnIndex(state)) {
+    spawnGeneralBoss(state, width, height);
+  } else if (isCommanderSpawnIndex(state)) {
     spawnCommander(state, width, height);
   } else if (isBossSpawnIndex(state)) {
     spawnBoss(state, width, height);
@@ -329,6 +389,7 @@ export function updateEnemies(state, width, height) {
       e.deadAt = Date.now();
       e.deathPhase = 'falling';
       e.fallProgress = 0;
+      if (e.type === 'boss_king') e.spawnMinions = true;
       state.castleHealth = castleHealth - 1;
       const fieldSoldiers = (state.soldiers || []).filter((s) => s.status === 'field');
       if (fieldSoldiers.length > 0) {
@@ -347,6 +408,21 @@ export function updateEnemies(state, width, height) {
     if (e.deathPhase === 'falling') {
       e.fallProgress = (e.fallProgress || 0) + 1 / FALL_DURATION;
       if (e.fallProgress >= 1) e.deathPhase = 'lying';
+    }
+  }
+
+  // 国王死亡后生成 15 名国王亲卫（部下）
+  for (const e of state.enemies) {
+    if (!e.alive && e.type === 'boss_king' && e.spawnMinions) {
+      const cx = state.castleCx;
+      const cy = state.castleCy;
+      for (let i = 0; i < KING_GUARD_COUNT; i++) {
+        const angle = (i / KING_GUARD_COUNT) * Math.PI * 2 + (Math.random() - 0.5);
+        const ox = Math.cos(angle) * 28 + (Math.random() - 0.5) * 10;
+        const oy = Math.sin(angle) * 12 + (Math.random() - 0.5) * 8;
+        state.enemies.push(createEnemy(e.x + ox, e.y + oy, cx, cy, 'king_guard'));
+      }
+      e.spawnMinions = false;
     }
   }
 
@@ -404,6 +480,7 @@ export function applyEnemyArcherShoot(state) {
       targetSoldier,
       targetCastle,
       age: 0,
+      isMage,
     });
     e.lastShotFrame = frame;
   }
@@ -481,6 +558,103 @@ export function applyDragonActions(state) {
 }
 
 /**
+ * 国王法杖发射蓝色魔法球：伤害低、数量多，可误伤己方敌人。
+ */
+export function applyKingOrbShoot(state) {
+  const frame = state.frameCount || 0;
+  const cx = state.castleCx ?? 0;
+  const cy = state.castleCy ?? 0;
+  const fieldSoldiers = (state.soldiers || []).filter((s) => s.status === 'field');
+
+  for (const e of state.enemies) {
+    if (!e.alive || e.type !== 'boss_king') continue;
+    if (e.frozenUntil && e.frozenUntil > Date.now()) continue;
+    if ((frame - (e.lastOrbFrame || 0)) < KING_ORB_INTERVAL) continue;
+    e.lastOrbFrame = frame;
+
+    let tx = cx;
+    let ty = cy;
+    let nearestDist = 9999;
+    for (const s of fieldSoldiers) {
+      const d = Math.hypot(e.x - s.x, e.y - s.y);
+      if (d < nearestDist) {
+        nearestDist = d;
+        tx = s.x;
+        ty = s.y;
+      }
+    }
+    const baseDx = tx - e.x;
+    const baseDy = ty - e.y;
+    const len = Math.hypot(baseDx, baseDy) || 1;
+    if (!state.kingOrbs) state.kingOrbs = [];
+    for (let i = 0; i < KING_ORB_COUNT; i++) {
+      const spread = (i - (KING_ORB_COUNT - 1) / 2) * KING_ORB_SPREAD;
+      const perpX = -baseDy / len;
+      const perpY = baseDx / len;
+      const dx = baseDx / len + perpX * spread;
+      const dy = baseDy / len + perpY * spread;
+      const L = Math.hypot(dx, dy) || 1;
+      state.kingOrbs.push({
+        x: e.x,
+        y: e.y,
+        vx: (dx / L) * KING_ORB_SPEED,
+        vy: (dy / L) * KING_ORB_SPEED,
+        damage: KING_ORB_DAMAGE,
+        age: 0,
+      });
+    }
+  }
+}
+
+/**
+ * Update king orbs; hit soldiers and enemies (friendly fire).
+ */
+export function updateKingOrbs(state) {
+  if (!state.kingOrbs || state.kingOrbs.length === 0) return;
+  const now = Date.now();
+
+  state.kingOrbs = state.kingOrbs.filter((orb) => {
+    orb.x += orb.vx;
+    orb.y += orb.vy;
+    orb.age++;
+    if (orb.age > KING_ORB_MAX_AGE) return false;
+
+    const dmg = orb.damage ?? KING_ORB_DAMAGE;
+    for (const s of state.soldiers || []) {
+      if (s.status !== 'field') continue;
+      const d = Math.hypot(orb.x - s.x, orb.y - s.y);
+      if (d < KING_ORB_HIT_R) {
+        s.hp = Math.max(0, (s.hp ?? s.maxHp) - Math.max(1, dmg - (s.defense ?? 0)));
+        s.hitFlashUntil = now + 280;
+        spawnBloodParticles(state, s.x, s.y, 2);
+        return false;
+      }
+    }
+    for (const e of state.enemies || []) {
+      if (!e.alive) continue;
+      const d = Math.hypot(orb.x - e.x, orb.y - e.y);
+      if (d < KING_ORB_HIT_R) {
+        const raw = Math.max(1, dmg - Math.floor((e.defense ?? 0) * 0.4));
+        e.hp = Math.max(0, (e.hp ?? e.maxHp) - raw);
+        e.hitFlashUntil = now + 300;
+        spawnBloodParticles(state, e.x, e.y, 2);
+        if (e.hp <= 0) {
+          e.alive = false;
+          e.deadAt = now;
+          e.deathPhase = 'falling';
+          e.fallProgress = 0;
+          if (e.type === 'boss_king') e.spawnMinions = true;
+          state.score = (state.score || 0) + 1;
+          state.gold = (state.gold || 0) + (e.goldReward ?? 8);
+        }
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+/**
  * Update dragon axe projectiles; apply damage to soldier or castle on hit.
  */
 export function updateDragonAxes(state) {
@@ -545,6 +719,12 @@ export function updateEnemyArrows(state) {
     if (arr.targetCastle) {
       const d = Math.hypot(arr.x - cx, arr.y - cy);
       if (d < castleR + 20) {
+        if (arr.isMage) {
+          state.enemyMageCastleHits = (state.enemyMageCastleHits || 0) + 1;
+          if (state.enemyMageCastleHits % 3 !== 0) {
+            return false;
+          }
+        }
         state.castleHealth = Math.max(0, (state.castleHealth ?? 10) - 1);
         return false;
       }
@@ -573,6 +753,22 @@ export function drawEnemyArrows(ctx, state) {
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(tipX, tipY, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+}
+
+/**
+ * Draw king blue orbs.
+ */
+export function drawKingOrbs(ctx, state) {
+  if (!state.kingOrbs || state.kingOrbs.length === 0) return;
+  state.kingOrbs.forEach((orb) => {
+    ctx.fillStyle = 'rgba(80,160,255,0.85)';
+    ctx.strokeStyle = 'rgba(120,200,255,0.9)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, 6, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   });
@@ -615,7 +811,7 @@ export function applyEnemyDamageToSoldiers(state) {
   for (const e of state.enemies) {
     if (!e.alive) continue;
     if (e.frozenUntil && e.frozenUntil > Date.now()) continue;
-    if (e.type === 'dragon' || e.type === 'dragon_warrior') continue;
+    if (e.type === 'dragon' || e.type === 'dragon_warrior' || e.type === 'boss_king') continue;
     let nearest = null;
     let nearestDist = range + 1;
     for (const s of fieldSoldiers) {
@@ -694,6 +890,7 @@ export function applySoldierDamage(state) {
         e.deadAt = Date.now();
         e.deathPhase = 'falling';
         e.fallProgress = 0;
+        if (e.type === 'boss_king') e.spawnMinions = true;
         state.score = (state.score || 0) + 1;
         state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
       }
@@ -737,14 +934,24 @@ export function drawEnemies(ctx, state) {
     const isWarWolf = e.type === 'war_wolf';
     const isCommander = e.type === 'commander';
     const isDragon = e.type === 'dragon' || e.type === 'dragon_warrior';
+    const isKing = e.type === 'boss_king';
+    const isGeneral = e.type === 'boss_general';
     let scale = isHeavy ? 1.35 : 1;
-    if (isBossSummoner || isCommander) scale = 1.25;
+    if (isKing) scale = 1.6;
+    else if (isGeneral) scale = 1.2;
+    else if (isBossSummoner || isCommander) scale = 1.25;
     else if (isWarWolf) scale = 0.95;
     else if (isDragon) scale = 1.1;
 
     if (isWarWolf) {
       if (e.alive) drawAliveWolf(ctx, e, x, y, now);
       else drawDeadWolf(ctx, e, x, y);
+    } else if (isGeneral) {
+      if (e.alive) drawAliveGeneral(ctx, e, x, y, now);
+      else drawDeadGeneral(ctx, e, x, y);
+    } else if (isKing) {
+      if (e.alive) drawAliveKing(ctx, e, x, y, now);
+      else drawDeadKing(ctx, e, x, y);
     } else if (isDragon) {
       if (e.alive) drawAliveDragon(ctx, e, x, y, now);
       else drawDeadDragon(ctx, e, x, y);
@@ -1069,6 +1276,165 @@ function drawDeadWolf(ctx, e, x, y) {
   ctx.restore();
 }
 
+/** 将军：黑马 + 背上骑士（盔甲、持剑） */
+function drawAliveGeneral(ctx, e, x, y, now) {
+  const nameText = e.name || getEnemyTypeName(e.type);
+  ctx.save();
+  ctx.font = '12px sans-serif';
+  ctx.fillStyle = 'rgba(255,248,220,0.95)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.strokeText(nameText, x, y - 26);
+  ctx.fillText(nameText, x, y - 26);
+  ctx.restore();
+
+  drawHealthBar(ctx, x, y - 16, 36, 3, e.hp, e.maxHp, true);
+  const flashing = e.hitFlashUntil > now;
+  const wasCrit = e.lastHitCrit && flashing;
+  const dir = e.vx >= 0 ? 1 : -1;
+  const phase = e.animPhase || 0;
+  const run = Math.sin(phase * 1.1) * 2.5;
+  const run2 = Math.sin(phase * 1.1 + Math.PI) * 2.5;
+
+  ctx.strokeStyle = wasCrit ? '#ffcc00' : flashing ? '#fff' : '#1a1a1a';
+  ctx.fillStyle = flashing ? '#606070' : '#2a2a32';
+  ctx.lineWidth = 1.8;
+  ctx.lineCap = 'round';
+
+  ctx.save();
+  ctx.translate(x, y + 2);
+  ctx.rotate(dir > 0 ? 0 : Math.PI);
+  ctx.translate(-x, -y - 2);
+
+  const bodyLen = 22;
+  const bodyH = 7;
+  const cx = x;
+  const cy = y + 2;
+  const bx = cx;
+  const headX = cx + (bodyLen / 2 + 5);
+  const headY = cy;
+  const tailX = cx - (bodyLen / 2 + 5);
+  const fwd = 1;
+
+  ctx.beginPath();
+  ctx.ellipse(bx, cy, bodyLen / 2, bodyH, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(headX, headY, 7, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(headX + fwd * 7, headY);
+  ctx.lineTo(headX + fwd * 12, headY + 1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(headX + fwd * 12, headY + 1, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(tailX, cy);
+  ctx.quadraticCurveTo(tailX - fwd * 10 + run, cy - 5, tailX - fwd * 16, cy - 3);
+  ctx.stroke();
+
+  const legY = cy + bodyH - 1;
+  const footY = legY + 11;
+  ctx.beginPath();
+  ctx.moveTo(bx + fwd * 7, legY);
+  ctx.lineTo(bx + fwd * 7 + run, footY);
+  ctx.moveTo(bx + fwd * 2, legY);
+  ctx.lineTo(bx + fwd * 2 + run2, footY);
+  ctx.moveTo(bx - fwd * 2, legY);
+  ctx.lineTo(bx - fwd * 2 + run, footY);
+  ctx.moveTo(bx - fwd * 7, legY);
+  ctx.lineTo(bx - fwd * 7 + run2, footY);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = flashing ? '#a0a0b0' : '#5a5a68';
+  ctx.strokeStyle = '#3a3a42';
+  ctx.beginPath();
+  ctx.arc(x, y - 10, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#4a4a52';
+  ctx.strokeStyle = '#2a2a32';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 6);
+  ctx.lineTo(x, y + 2);
+  ctx.stroke();
+  ctx.strokeStyle = '#6a6a72';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x + dir * 4, y - 4);
+  ctx.lineTo(x + dir * 4 + dir * 12, y - 8);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + dir * 4 + dir * 12, y - 8);
+  ctx.lineTo(x + dir * 4 + dir * 14, y - 7);
+  ctx.lineTo(x + dir * 4 + dir * 12, y - 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  if (e.frozenUntil && e.frozenUntil > Date.now()) {
+    ctx.fillStyle = 'rgba(120,200,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(x, y, 28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(180,230,255,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  if (e.burningUntil && e.burningUntil > now) {
+    const flicker = Math.sin(now * 0.015 + x) * 0.5 + 0.5;
+    ctx.fillStyle = flicker > 0.5 ? '#ff9900' : '#cc4400';
+    [[-8, -6], [10, -4], [-5, 8], [7, 5]].forEach(([ox, oy], i) => {
+      const ax = x + ox + Math.sin(now * 0.02 + i) * 2;
+      const ay = y + oy + Math.cos(now * 0.018 + i * 1.2) * 2;
+      ctx.fillRect(Math.floor(ax - 1.5), Math.floor(ay - 1.5), 3, 3);
+    });
+  }
+}
+
+function drawDeadGeneral(ctx, e, x, y) {
+  const dir = e.vx >= 0 ? 1 : -1;
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.fillStyle = '#2a2a32';
+  ctx.lineWidth = 1.8;
+  ctx.lineCap = 'round';
+  ctx.save();
+  ctx.translate(x, y + 4);
+  ctx.rotate(dir > 0 ? 0 : Math.PI);
+  const bodyLen = 20;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, bodyLen / 2, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(bodyLen / 2 + 4, 0, 6, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-bodyLen / 2 - 2, 0);
+  ctx.lineTo(-bodyLen / 2 - 12, -2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(6, -6);
+  ctx.lineTo(6 + 3, 4);
+  ctx.moveTo(2, -6);
+  ctx.lineTo(2 + 2, 5);
+  ctx.moveTo(-2, -6);
+  ctx.lineTo(-2 + 3, 4);
+  ctx.moveTo(-6, -6);
+  ctx.lineTo(-6 + 2, 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** 飞龙：龙身 + 双翼（扇动）+ 龙头 + 尾 + 背上骑士（持斧） */
 function drawAliveDragon(ctx, e, x, y, now) {
   const nameText = e.name || getEnemyTypeName(e.type);
@@ -1204,6 +1570,133 @@ function drawDeadDragon(ctx, e, x, y) {
   ctx.beginPath();
   ctx.moveTo(x - dir * bodyLen / 2, y);
   ctx.lineTo(x - dir * (bodyLen / 2 + 14), y - 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 国王：皇冠、红袍、体型大、持法杖 */
+function drawAliveKing(ctx, e, x, y, now) {
+  const nameText = e.name || getEnemyTypeName(e.type);
+  ctx.save();
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = 'rgba(255,230,180,0.95)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.strokeText(nameText, x, y - 32);
+  ctx.fillText(nameText, x, y - 32);
+  ctx.restore();
+
+  drawHealthBar(ctx, x, y - 22, 44, 4, e.hp, e.maxHp, true);
+  const flashing = e.hitFlashUntil > now;
+  const wasCrit = e.lastHitCrit && flashing;
+  const dir = e.vx >= 0 ? 1 : -1;
+  const scale = 1.6;
+
+  ctx.strokeStyle = wasCrit ? '#ffcc00' : flashing ? '#fff' : '#3a2020';
+  ctx.fillStyle = flashing ? '#e8a090' : '#8b2020';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  const r = 7 * scale;
+  const bodyLen = 14 * scale;
+  const hipY = y + bodyLen * 0.6;
+  const footY = y + 22 * scale;
+
+  ctx.beginPath();
+  ctx.arc(x, y - 8, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#d4a030';
+  ctx.strokeStyle = '#8a7018';
+  ctx.beginPath();
+  ctx.moveTo(x - 12, y - 18);
+  ctx.lineTo(x - 6, y - 14);
+  ctx.lineTo(x, y - 20);
+  ctx.lineTo(x + 6, y - 14);
+  ctx.lineTo(x + 12, y - 18);
+  ctx.lineTo(x + 8, y - 10);
+  ctx.lineTo(x, y - 6);
+  ctx.lineTo(x - 8, y - 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = flashing ? '#e8a090' : '#8b2020';
+  ctx.strokeStyle = '#3a2020';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 2);
+  ctx.lineTo(x, y + bodyLen);
+  ctx.stroke();
+  ctx.fillRect(x - 18, y + 2, 36, bodyLen - 2);
+  ctx.strokeRect(x - 18, y + 2, 36, bodyLen - 2);
+
+  ctx.strokeStyle = '#4a3540';
+  ctx.fillStyle = '#5a4550';
+  ctx.lineWidth = 2;
+  const staffX = x + dir * 22;
+  const staffTop = y - 16;
+  ctx.beginPath();
+  ctx.moveTo(staffX, y + 4);
+  ctx.lineTo(staffX, staffTop);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(100,180,255,0.9)';
+  ctx.strokeStyle = 'rgba(140,200,255,0.95)';
+  ctx.beginPath();
+  ctx.arc(staffX, staffTop, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  const phase = e.animPhase || 0;
+  const legStep = 4 * scale;
+  const step = Math.sin(phase) * legStep;
+  ctx.strokeStyle = '#3a2020';
+  ctx.beginPath();
+  ctx.moveTo(x, hipY);
+  ctx.lineTo(x - 6 + step, footY);
+  ctx.moveTo(x, hipY);
+  ctx.lineTo(x + 6 - step, footY);
+  ctx.stroke();
+
+  if (e.frozenUntil && e.frozenUntil > Date.now()) {
+    ctx.fillStyle = 'rgba(120,200,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(x, y, 32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(180,230,255,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  if (e.burningUntil && e.burningUntil > now) {
+    const flicker = Math.sin(now * 0.015 + x) * 0.5 + 0.5;
+    ctx.fillStyle = flicker > 0.5 ? '#ff9900' : '#cc4400';
+    [[-12, -10], [14, -8], [-8, 12], [10, 8]].forEach(([ox, oy], i) => {
+      const ax = x + ox + Math.sin(now * 0.02 + i) * 2;
+      const ay = y + oy + Math.cos(now * 0.018 + i * 1.2) * 2;
+      ctx.fillRect(Math.floor(ax - 1.5), Math.floor(ay - 1.5), 3, 3);
+    });
+  }
+}
+
+function drawDeadKing(ctx, e, x, y) {
+  const dir = e.vx >= 0 ? 1 : -1;
+  const fallProgress = Math.min(1, e.fallProgress || 0);
+
+  ctx.strokeStyle = '#3a2020';
+  ctx.fillStyle = '#6b3030';
+  ctx.lineWidth = 2;
+  ctx.save();
+  ctx.translate(x, y + fallProgress * 10);
+  if (dir < 0) ctx.scale(-1, 1);
+  ctx.translate(-x, -y - fallProgress * 10);
+  ctx.beginPath();
+  ctx.ellipse(x, y, 20, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + dir * 14, y - 4, 8, 0, Math.PI * 2);
+  ctx.fill();
   ctx.stroke();
   ctx.restore();
 }

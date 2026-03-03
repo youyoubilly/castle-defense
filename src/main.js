@@ -1,7 +1,7 @@
 import './style.css';
 import { getCanvas, getCtx, resizeCanvas, clientToCanvas } from './canvas.js';
 import { setupDrawing } from './drawing.js';
-import { createState, gameLoop, startNextWave, resetState, continueGame, canContinue, CASTLE_MAX_LEVEL, syncCastleTowerHeight } from './game.js';
+import { createState, gameLoop, startNextWave, resetState, continueGame, continueGameFromAd, canContinue, CASTLE_MAX_LEVEL, syncCastleTowerHeight } from './game.js';
 import { startSpawning } from './enemies.js';
 import { createArchers } from './archers.js';
 import { addSoldier, getUpgradeOptions, upgradeSoldierTo, UPGRADE_COSTS } from './soldiers.js';
@@ -210,6 +210,10 @@ function main() {
   const gameOverGoldEl = document.getElementById('game-over-gold');
   const gameOverRestartBtn = document.getElementById('game-over-restart');
   const gameOverContinueBtn = document.getElementById('game-over-continue');
+  const gameOverAdBtn = document.getElementById('game-over-ad');
+  const adOverlay = document.getElementById('ad-overlay');
+  const adCountdownEl = document.getElementById('ad-countdown');
+  const adSkipBtn = document.getElementById('ad-skip');
 
   gameOverRestartBtn.onclick = () => {
     resetState(state);
@@ -221,6 +225,38 @@ function main() {
     continueGame(state);
     gameOverOverlay.classList.add('game-over-hidden');
   };
+
+  let adCountdownTimer = null;
+  gameOverAdBtn.onclick = () => {
+    gameOverOverlay.classList.add('game-over-hidden');
+    adOverlay.classList.remove('ad-overlay-hidden');
+    let remaining = 5;
+    if (adCountdownEl) adCountdownEl.textContent = remaining;
+    if (adSkipBtn) adSkipBtn.disabled = true;
+    adCountdownTimer = setInterval(() => {
+      remaining -= 1;
+      if (adCountdownEl) adCountdownEl.textContent = remaining;
+      if (remaining <= 0) {
+        clearInterval(adCountdownTimer);
+        adCountdownTimer = null;
+        continueGameFromAd(state);
+        adOverlay.classList.add('ad-overlay-hidden');
+        if (adSkipBtn) adSkipBtn.disabled = true;
+      }
+    }, 1000);
+  };
+
+  if (adSkipBtn) {
+    adSkipBtn.onclick = () => {
+      if (adCountdownTimer != null) {
+        clearInterval(adCountdownTimer);
+        adCountdownTimer = null;
+      }
+      continueGameFromAd(state);
+      adOverlay.classList.add('ad-overlay-hidden');
+      adSkipBtn.disabled = true;
+    };
+  }
 
   const soldierUpgradePanel = document.getElementById('soldier-upgrade-panel');
   const soldierUpgradeButtons = document.getElementById('soldier-upgrade-buttons');

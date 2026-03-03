@@ -126,6 +126,7 @@ export function updateCannonballs(state) {
         e.deadAt = Date.now();
         e.deathPhase = 'falling';
         e.fallProgress = 0;
+        if (e.type === 'boss_king') e.spawnMinions = true;
         state.score = (state.score || 0) + 1;
         state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
       }

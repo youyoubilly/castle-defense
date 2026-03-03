@@ -394,6 +394,7 @@ function castFireRain(state, x, y, weatherMod) {
         e.deadAt = Date.now();
         e.deathPhase = 'falling';
         e.fallProgress = 0;
+        if (e.type === 'boss_king') e.spawnMinions = true;
         state.score = (state.score || 0) + 1;
         state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
       }
@@ -458,6 +459,7 @@ function castFreeze(state, x, y, weatherMod) {
           e.deadAt = Date.now();
           e.deathPhase = 'falling';
           e.fallProgress = 0;
+          if (e.type === 'boss_king') e.spawnMinions = true;
           state.score = (state.score || 0) + 1;
           state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
         }
@@ -579,6 +581,7 @@ function castFrostRing(state, x, y, weatherMod) {
         e.deadAt = Date.now();
         e.deathPhase = 'falling';
         e.fallProgress = 0;
+        if (e.type === 'boss_king') e.spawnMinions = true;
         state.score = (state.score || 0) + 1;
         state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
       }
@@ -671,6 +674,7 @@ export function updateMagic(state) {
           e.deadAt = Date.now();
           e.deathPhase = 'falling';
           e.fallProgress = 0;
+          if (e.type === 'boss_king') e.spawnMinions = true;
           state.score = (state.score || 0) + 1;
           state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
         }
@@ -709,6 +713,7 @@ export function updateMagic(state) {
               e.deadAt = Date.now();
               e.deathPhase = 'falling';
               e.fallProgress = 0;
+              if (e.type === 'boss_king') e.spawnMinions = true;
               state.score = (state.score || 0) + 1;
               state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
             }
@@ -779,6 +784,7 @@ export function updateMagic(state) {
             e.deadAt = Date.now();
             e.deathPhase = 'falling';
             e.fallProgress = 0;
+            if (e.type === 'boss_king') e.spawnMinions = true;
             state.score = (state.score || 0) + 1;
             state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
           }
@@ -808,6 +814,7 @@ export function updateMagic(state) {
           e.deadAt = now;
           e.deathPhase = 'falling';
           e.fallProgress = 0;
+          if (e.type === 'boss_king') e.spawnMinions = true;
           state.score = (state.score || 0) + 1;
           state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
         }
@@ -838,6 +845,7 @@ export function updateMagic(state) {
           e.deadAt = now;
           e.deathPhase = 'falling';
           e.fallProgress = 0;
+          if (e.type === 'boss_king') e.spawnMinions = true;
           state.score = (state.score || 0) + 1;
           state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
         }
@@ -871,6 +879,7 @@ export function updateMagic(state) {
               e2.deadAt = now;
               e2.deathPhase = 'falling';
               e2.fallProgress = 0;
+              if (e2.type === 'boss_king') e2.spawnMinions = true;
               state.score = (state.score || 0) + 1;
               state.gold = (state.gold || 0) + (e2.goldReward ?? state.goldPerKill ?? 8);
             }
@@ -898,6 +907,7 @@ export function updateMagic(state) {
         e.deadAt = Date.now();
         e.deathPhase = 'falling';
         e.fallProgress = 0;
+        if (e.type === 'boss_king') e.spawnMinions = true;
         state.score = (state.score || 0) + 1;
         state.gold = (state.gold || 0) + (e.goldReward ?? state.goldPerKill ?? 8);
       }
