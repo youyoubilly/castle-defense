@@ -27,11 +27,25 @@ export function clientToCanvas(canvas, clientX, clientY) {
 }
 
 /**
+ * 是否移动端（触屏优先、窄屏）
+ */
+export function isMobile() {
+  if (typeof window === 'undefined') return false;
+  const w = window.innerWidth;
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  return w <= 768 || (hasTouch && w <= 1024);
+}
+
+/**
  * Resize canvas to fill window and return current dimensions.
+ * 移动端使用 visualViewport 避免地址栏/键盘影响可视区域。
  */
 export function resizeCanvas(canvas) {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
+  const visual = typeof window !== 'undefined' && window.visualViewport ? window.visualViewport : null;
+  const w = visual ? Math.round(visual.width) : vw;
+  const h = visual ? Math.round(visual.height) : vh;
   canvas.width = w;
   canvas.height = h;
   return { width: w, height: h };

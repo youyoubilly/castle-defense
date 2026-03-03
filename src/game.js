@@ -289,27 +289,35 @@ export function gameLoop(ctx, canvas, state) {
   }
 }
 
+/** 移动端时 HUD 下移，避免被顶栏遮挡（顶栏约 52–80px） */
+const HUD_TOP_OFFSET_MOBILE = 72;
+const HUD_TOP_OFFSET_DESKTOP = 16;
+const HUD_LINE_HEIGHT = 22;
+const HUD_FONT = '18px sans-serif';
+const HUD_FONT_SMALL = '14px sans-serif';
+
 function drawHUD(ctx, state) {
+  const isNarrow = (state.width || 800) <= 768;
+  const top = isNarrow ? HUD_TOP_OFFSET_MOBILE : HUD_TOP_OFFSET_DESKTOP;
+  const line = HUD_LINE_HEIGHT;
   ctx.fillStyle = '#fff';
-  ctx.font = '18px sans-serif';
+  ctx.font = HUD_FONT;
   ctx.textAlign = 'left';
-  ctx.fillText('得分: ' + (state.score || 0), 16, 28);
-  ctx.fillText('城堡血量: ' + Math.max(0, state.castleHealth ?? 10) + '  Lv.' + (state.castleLevel ?? 1), 16, 52);
+  ctx.fillText('得分: ' + (state.score || 0), 16, top);
+  ctx.fillText('城堡血量: ' + Math.max(0, state.castleHealth ?? 10) + '  Lv.' + (state.castleLevel ?? 1), 16, top + line);
   ctx.fillStyle = '#e8c830';
-  ctx.fillText('金币: ' + (state.gold ?? 0), 16, 76);
-  ctx.font = '14px sans-serif';
+  ctx.fillText('金币: ' + (state.gold ?? 0), 16, top + line * 2);
+  ctx.font = HUD_FONT_SMALL;
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillText('天气: ' + (state.weather ? getWeatherName(state.weather.current) : '晴天'), 16, 98);
+  ctx.fillText('天气: ' + (state.weather ? getWeatherName(state.weather.current) : '晴天'), 16, top + line * 3);
   ctx.fillStyle = '#b0d0ff';
-  ctx.fillText('第' + (state.wave ?? 1) + '波', 16, 118);
+  ctx.fillText('第' + (state.wave ?? 1) + '波', 16, top + line * 4);
   const alive = (state.enemies || []).filter((e) => e.alive).length;
   const left = Math.max(0, (state.waveEnemiesToSpawn ?? 0) - (state.waveEnemiesSpawned ?? 0));
-  ctx.fillText('剩余: ' + (left + alive), 16, 136);
+  ctx.fillText('剩余: ' + (left + alive), 16, top + line * 5);
 }
 
 const BOSS_TYPES = ['boss_king', 'boss_general', 'boss_summoner', 'war_wolf'];
-const BOSS_BAR_TOP = 64;
-const BOSS_BAR_WIDTH = 300;
 const BOSS_BAR_HEIGHT = 14;
 
 function drawBossHealthBar(ctx, state) {
@@ -321,28 +329,31 @@ function drawBossHealthBar(ctx, state) {
   const ratio = totalMaxHp > 0 ? Math.max(0, Math.min(1, totalHp / totalMaxHp)) : 0;
 
   const w = state.width || 800;
-  const x = (w - BOSS_BAR_WIDTH) / 2;
-  const y = BOSS_BAR_TOP;
+  const isNarrow = w <= 768;
+  const barWidth = isNarrow ? Math.min(280, w - 32) : 300;
+  const barTop = isNarrow ? 76 : 64;
+  const x = (w - barWidth) / 2;
+  const y = barTop;
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.strokeStyle = 'rgba(180,80,60,0.9)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(x, y, BOSS_BAR_WIDTH, BOSS_BAR_HEIGHT, 6);
+  ctx.roundRect(x, y, barWidth, BOSS_BAR_HEIGHT, 6);
   ctx.fill();
   ctx.stroke();
 
   if (ratio > 0) {
-    const fillW = Math.max(2, BOSS_BAR_WIDTH * ratio);
+    const fillW = Math.max(2, barWidth * ratio);
     const grad = ctx.createLinearGradient(x, 0, x + fillW, 0);
     grad.addColorStop(0, '#c03030');
     grad.addColorStop(0.5, '#a02020');
     grad.addColorStop(1, '#701818');
     ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.roundRect(x + 2, y + 2, fillW - 4, BOSS_BAR_HEIGHT - 4, 4);
-    ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(x + 2, y + 2, fillW - 4, BOSS_BAR_HEIGHT - 4, 4);
+  ctx.fill();
   }
 
   ctx.font = 'bold 11px sans-serif';
@@ -371,8 +382,9 @@ function drawUnitPanel(ctx, state) {
   const isSoldier = sel.type === 'soldier';
   const extraLine = isSoldier ? (sel.unit.magicAttack ?? 0) > 0 : (sel.unit.magicDefense ?? 0) > 0;
   const panelH = 88 + (extraLine ? 18 : 0);
-  const x = w - panelW - 20;
-  const y = 100;
+  const isNarrow = w <= 768;
+  const x = w - panelW - (isNarrow ? 12 : 20);
+  const y = isNarrow ? 88 : 100;
 
   if (isSoldier) {
     ctx.fillStyle = 'rgba(22,38,58,0.92)';

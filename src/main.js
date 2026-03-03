@@ -131,13 +131,18 @@ function main() {
     });
   }
 
-  window.addEventListener('resize', () => {
+  const onResize = () => {
     resizeCanvas(canvas);
     state.width = canvas.width;
     state.height = canvas.height;
     state.castleCx = canvas.width / 2;
     state.castleCy = canvas.height * 0.75;
-  });
+  };
+  window.addEventListener('resize', onResize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onResize);
+    window.visualViewport.addEventListener('scroll', onResize);
+  }
 
   const SKILL_KEYS = [
     SKILL_IDS.FIRE_RAIN,

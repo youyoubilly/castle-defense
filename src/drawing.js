@@ -10,12 +10,12 @@ function hitTestCastle(state, px, py) {
 }
 
 /**
- * Mouse input: castle / unit selection, wave complete, magic cast.
+ * Mouse & touch input: castle / unit selection, wave complete, magic cast.
  * 画线阻挡敌人功能已移除。
  */
 export function setupDrawing(canvas, state, clientToCanvas, { onWaveComplete } = {}) {
-  const onDown = (e) => {
-    const p = clientToCanvas(canvas, e.clientX, e.clientY);
+  const handlePoint = (clientX, clientY) => {
+    const p = clientToCanvas(canvas, clientX, clientY);
     if (state.waveState === 'completed' && onWaveComplete) {
       onWaveComplete();
       return;
@@ -38,7 +38,20 @@ export function setupDrawing(canvas, state, clientToCanvas, { onWaveComplete } =
     state.selectedUnit = null;
   };
 
+  const onDown = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    handlePoint(e.clientX, e.clientY);
+  };
+
+  const onTouch = (e) => {
+    if (e.cancelable) e.preventDefault();
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    handlePoint(t.clientX, t.clientY);
+  };
+
   canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('touchend', onTouch, { passive: false });
 }
 
 /** 画线功能已移除，保留空实现以免调用处报错 */
